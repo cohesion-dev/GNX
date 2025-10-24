@@ -1,24 +1,20 @@
 package app
 
-import (
-	"github.com/cohesion-dev/GNX/backend/internal/handlers"
-)
-
 func (s *Server) setupRoutes() {
 	api := s.router.Group("/api")
 	{
 		comic := api.Group("/comic")
 		{
-			comic.GET("", handlers.GetComics)
-			comic.POST("", handlers.CreateComic)
-			comic.GET("/:id", handlers.GetComic)
-			comic.GET("/:id/sections", handlers.GetComicSections)
+			comic.GET("", s.comicHandler.GetComics)
+			comic.POST("", s.comicHandler.CreateComic)
+			comic.GET("/:id", s.comicHandler.GetComic)
+			comic.GET("/:id/sections", s.comicHandler.GetComicSections)
 
-			comic.POST("/:id/section", handlers.CreateSection)
-			comic.GET("/:id/section/:section_id/content", handlers.GetSectionContent)
-			comic.GET("/:id/section/:section_id/storyboards", handlers.GetStoryboards)
+			comic.POST("/:id/section", s.sectionHandler.CreateSection)
+			comic.GET("/:id/section/:section_id/content", s.sectionHandler.GetSectionContent)
+			comic.GET("/:id/section/:section_id/storyboards", s.sectionHandler.GetStoryboards)
 		}
 
-		api.GET("/tts/:storyboard_tts_id", handlers.GetTTSAudio)
+		api.GET("/tts/:storyboard_tts_id", s.ttsHandler.GetTTSAudio)
 	}
 }

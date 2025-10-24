@@ -7,13 +7,21 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/cohesion-dev/GNX/backend/config"
+	"github.com/cohesion-dev/GNX/backend/internal/handlers"
 	"github.com/cohesion-dev/GNX/backend/internal/middleware"
+	"github.com/cohesion-dev/GNX/backend/internal/repositories"
+	"github.com/cohesion-dev/GNX/backend/internal/services"
+	"github.com/cohesion-dev/GNX/backend/pkg/ai"
+	"github.com/cohesion-dev/GNX/backend/pkg/storage"
 )
 
 type Server struct {
-	db     *gorm.DB
-	config *Config
-	router *gin.Engine
+	db            *gorm.DB
+	config        *config.Config
+	router        *gin.Engine
+	comicHandler  *handlers.ComicHandler
+	sectionHandler *handlers.SectionHandler
+	ttsHandler    *handlers.TTSHandler
 }
 
 func NewServer(db *gorm.DB, cfg *config.Config) *Server {
@@ -23,10 +31,51 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 	router.Use(middleware.Recovery())
 	router.Use(middleware.Logging())
 
+	comicRepo := repositories.NewComicRepository(db)
+	roleRepo := repositories.NewRoleRepository(db)
+	sectionRepo := repositories.NewSectionRepository(db)
+	storyboardRepo := repositories.NewStoryboardRepository(db)
+
+	aiService := ai.NewOpenAIClient(cfg.OpenAIAPIKey)
+	storageService := storage.NewQiniuClient(
+		cfg.QiniuConfig.AccessKey,
+		cfg.QiniuConfig.SecretKey,
+		cfg.QiniuConfig.Bucket,
+		cfg.QiniuConfig.Domain,
+	)
+
+	comicService := services.NewComicService(
+		comicRepo,
+		roleRepo,
+		sectionRepo,
+		aiService,
+		storageService,
+		db,
+	)
+
+	sectionService := services.NewSectionService(
+		sectionRepo,
+		storyboardRepo,
+		roleRepo,
+		comicRepo,
+		aiService,
+		storageService,
+		db,
+	)
+
+	ttsService := services.NewTTSService(storyboardRepo)
+
+	comicHandler := handlers.NewComicHandler(comicService)
+	sectionHandler := handlers.NewSectionHandler(sectionService)
+	ttsHandler := handlers.NewTTSHandler(ttsService)
+
 	server := &Server{
-		db:     db,
-		config: cfg,
-		router: router,
+		db:             db,
+		config:         cfg,
+		router:         router,
+		comicHandler:   comicHandler,
+		sectionHandler: sectionHandler,
+		ttsHandler:     ttsHandler,
 	}
 
 	server.setupRoutes()
