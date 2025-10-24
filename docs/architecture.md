@@ -91,7 +91,6 @@ func SetupRoutes(r *gin.Engine) {
         api.GET("/comic", handlers.GetComics)
         api.POST("/comic", handlers.CreateComic)
         api.GET("/comic/:id", handlers.GetComic)
-        api.GET("/comic/:id/roles", handlers.GetComicRoles)
         api.GET("/comic/:id/sections", handlers.GetComicSections)
         
         // 章节相关
