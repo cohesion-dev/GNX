@@ -5,16 +5,21 @@ import (
 )
 
 type Comic struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	Title      string    `gorm:"not null" json:"title"`
-	Brief      string    `json:"brief"`
-	Icon       string    `json:"icon"`
-	Bg         string    `json:"bg"`
-	UserPrompt string    `json:"user_prompt"`
-	Status     string    `gorm:"default:pending" json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	
-	Roles    []Role    `gorm:"foreignKey:ComicID" json:"roles,omitempty"`
-	Sections []Section `gorm:"foreignKey:ComicID" json:"sections,omitempty"`
+	ID         uint       `json:"id" gorm:"primaryKey"`
+	Title      string     `json:"title" gorm:"size:255;not null"`
+	Brief      string     `json:"brief" gorm:"type:text"`
+	Icon       string     `json:"icon" gorm:"size:500"`
+	Bg         string     `json:"bg" gorm:"size:500"`
+	UserPrompt string     `json:"user_prompt" gorm:"type:text"`
+	Status     string     `json:"status" gorm:"size:20;default:'pending'"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	DeletedAt  *time.Time `json:"deleted_at,omitempty" gorm:"index"`
+
+	Roles    []ComicRole    `json:"roles,omitempty" gorm:"foreignKey:ComicID"`
+	Sections []ComicSection `json:"sections,omitempty" gorm:"foreignKey:ComicID"`
+}
+
+func (Comic) TableName() string {
+	return "comic"
 }

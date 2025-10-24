@@ -2,19 +2,36 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
+
+	"github.com/cohesion-dev/GNX/backend/internal/services"
+	"github.com/cohesion-dev/GNX/backend/internal/utils"
 )
 
 type TTSHandler struct {
-	db *gorm.DB
+	ttsService *services.TTSService
 }
 
-func NewTTSHandler(db *gorm.DB) *TTSHandler {
-	return &TTSHandler{db: db}
+func NewTTSHandler(ttsService *services.TTSService) *TTSHandler {
+	return &TTSHandler{
+		ttsService: ttsService,
+	}
 }
 
 func (h *TTSHandler) GetTTSAudio(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Get TTS audio"})
+	detailID, err := strconv.ParseUint(c.Param("storyboard_tts_id"), 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Invalid TTS ID", err.Error())
+		return
+	}
+
+	audioURL, err := h.ttsService.GetTTSAudio(uint(detailID))
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusNotFound, "TTS audio not found", err.Error())
+		return
+	}
+
+	c.Redirect(http.StatusFound, audioURL)
 }

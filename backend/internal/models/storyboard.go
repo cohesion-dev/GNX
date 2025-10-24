@@ -4,30 +4,35 @@ import (
 	"time"
 )
 
-type Storyboard struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	SectionID   uint      `gorm:"not null;index" json:"section_id"`
-	ImagePrompt string    `gorm:"type:text" json:"image_prompt"`
-	ImageURL    string    `json:"image_url"`
+type ComicStoryboard struct {
+	ID          uint      `json:"id" gorm:"primaryKey"`
+	SectionID   uint      `json:"section_id" gorm:"not null"`
+	ImagePrompt string    `json:"image_prompt" gorm:"type:text"`
+	ImageURL    string    `json:"image_url" gorm:"size:500"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	
-	Details []StoryboardDetail `gorm:"foreignKey:StoryboardID" json:"details,omitempty"`
+
+	Section ComicSection              `json:"section,omitempty" gorm:"foreignKey:SectionID"`
+	Details []ComicStoryboardDetail   `json:"details,omitempty" gorm:"foreignKey:StoryboardID"`
 }
 
-type StoryboardDetail struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	StoryboardID uint      `gorm:"not null;index" json:"storyboard_id"`
-	Detail       string    `gorm:"type:text" json:"detail"`
-	RoleID       *uint     `gorm:"index" json:"role_id"`
-	TTSURL       string    `json:"tts_url"`
+func (ComicStoryboard) TableName() string {
+	return "comic_storyboard"
+}
+
+type ComicStoryboardDetail struct {
+	ID           uint      `json:"id" gorm:"primaryKey"`
+	StoryboardID uint      `json:"storyboard_id" gorm:"not null"`
+	Detail       string    `json:"detail" gorm:"type:text"`
+	RoleID       *uint     `json:"role_id"`
+	TTSUrl       string    `json:"tts_url" gorm:"size:500"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+
+	Storyboard ComicStoryboard `json:"storyboard,omitempty" gorm:"foreignKey:StoryboardID"`
+	Role       *ComicRole      `json:"role,omitempty" gorm:"foreignKey:RoleID"`
 }
 
-type RoleStoryboard struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	StoryboardID uint      `gorm:"not null;index" json:"storyboard_id"`
-	RoleID       uint      `gorm:"not null;index" json:"role_id"`
-	CreatedAt    time.Time `json:"created_at"`
+func (ComicStoryboardDetail) TableName() string {
+	return "comic_storyboard_detail"
 }

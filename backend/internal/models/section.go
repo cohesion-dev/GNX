@@ -4,14 +4,19 @@ import (
 	"time"
 )
 
-type Section struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	ComicID     uint      `gorm:"not null;index" json:"comic_id"`
-	Index       int       `gorm:"not null" json:"index"`
-	Detail      string    `gorm:"type:text" json:"detail"`
-	Status      string    `gorm:"default:pending" json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	
-	Storyboards []Storyboard `gorm:"foreignKey:SectionID" json:"storyboards,omitempty"`
+type ComicSection struct {
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	ComicID   uint      `json:"comic_id" gorm:"not null"`
+	Index     int       `json:"index" gorm:"not null"`
+	Detail    string    `json:"detail" gorm:"type:text;not null"`
+	Status    string    `json:"status" gorm:"size:20;default:'pending'"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	Comic       Comic             `json:"comic,omitempty" gorm:"foreignKey:ComicID"`
+	Storyboards []ComicStoryboard `json:"storyboards,omitempty" gorm:"foreignKey:SectionID"`
+}
+
+func (ComicSection) TableName() string {
+	return "comic_section"
 }

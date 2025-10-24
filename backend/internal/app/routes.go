@@ -1,31 +1,20 @@
 package app
 
-import (
-	"github.com/cohesion-dev/GNX/backend/internal/handlers"
-	"github.com/cohesion-dev/GNX/backend/internal/middleware"
-	"github.com/gin-gonic/gin"
-)
-
-func (s *Server) SetupRoutes(r *gin.Engine) {
-	r.Use(middleware.CORS())
-	r.Use(middleware.Logging())
-	r.Use(middleware.Recovery())
-
-	api := r.Group("/api")
+func (s *Server) setupRoutes() {
+	api := s.router.Group("/api")
 	{
-		comicHandler := handlers.NewComicHandler(s.DB)
-		sectionHandler := handlers.NewSectionHandler(s.DB)
-		ttsHandler := handlers.NewTTSHandler(s.DB)
+		comic := api.Group("/comic")
+		{
+			comic.GET("", s.comicHandler.GetComics)
+			comic.POST("", s.comicHandler.CreateComic)
+			comic.GET("/:id", s.comicHandler.GetComic)
+			comic.GET("/:id/sections", s.comicHandler.GetComicSections)
 
-		api.GET("/comic", comicHandler.GetComics)
-		api.POST("/comic", comicHandler.CreateComic)
-		api.GET("/comic/:id", comicHandler.GetComic)
-		api.GET("/comic/:id/sections", comicHandler.GetComicSections)
+			comic.POST("/:id/section", s.sectionHandler.CreateSection)
+			comic.GET("/:id/section/:section_id/content", s.sectionHandler.GetSectionContent)
+			comic.GET("/:id/section/:section_id/storyboards", s.sectionHandler.GetStoryboards)
+		}
 
-		api.POST("/comic/:id/section", sectionHandler.CreateSection)
-		api.GET("/comic/:id/section/:section_id/content", sectionHandler.GetSectionContent)
-		api.GET("/comic/:id/section/:section_id/storyboards", sectionHandler.GetStoryboards)
-
-		api.GET("/tts/:storyboard_tts_id", ttsHandler.GetTTSAudio)
+		api.GET("/tts/:storyboard_tts_id", s.ttsHandler.GetTTSAudio)
 	}
 }

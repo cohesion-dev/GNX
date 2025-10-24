@@ -6,7 +6,6 @@ import (
 	"github.com/cohesion-dev/GNX/backend/config"
 	"github.com/cohesion-dev/GNX/backend/internal/app"
 	"github.com/cohesion-dev/GNX/backend/pkg/database"
-	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -28,12 +27,8 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
-	router := gin.Default()
-	
-	server := app.NewServer(db)
-	server.SetupRoutes(router)
-
-	if err := router.Run(":8080"); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	server := app.NewServer(db, cfg)
+	if err := server.Run(); err != nil {
+		log.Fatalf("Failed to run server: %v", err)
 	}
 }

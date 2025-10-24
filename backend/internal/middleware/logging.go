@@ -9,15 +9,20 @@ import (
 
 func Logging() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.Request.URL.Path
-		method := c.Request.Method
+		startTime := time.Now()
 
 		c.Next()
 
-		latency := time.Since(start)
+		endTime := time.Now()
+		latency := endTime.Sub(startTime)
 		statusCode := c.Writer.Status()
 
-		log.Printf("[%s] %s %d %v", method, path, statusCode, latency)
+		log.Printf("[%s] %s %s %d %v",
+			c.Request.Method,
+			c.Request.RequestURI,
+			c.ClientIP(),
+			statusCode,
+			latency,
+		)
 	}
 }
