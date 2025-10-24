@@ -35,7 +35,9 @@
 
 1. 安装 Go 1.21+
 2. 安装 PostgreSQL
-3. 复制 `.env.example` 为 `.env` 并配置环境变量
+3. 配置应用（支持两种方式，配置文件优先级更高）：
+   - 方式一：复制 `config/config.yaml.example` 为 `config/config.yaml` 并配置（推荐）
+   - 方式二：复制 `.env.example` 为 `.env` 并配置环境变量
 
 ### 运行
 
