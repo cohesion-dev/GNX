@@ -16,12 +16,12 @@ import (
 )
 
 type Server struct {
-	db            *gorm.DB
-	config        *config.Config
-	router        *gin.Engine
-	comicHandler  *handlers.ComicHandler
+	db             *gorm.DB
+	config         *config.Config
+	router         *gin.Engine
+	comicHandler   *handlers.ComicHandler
 	sectionHandler *handlers.SectionHandler
-	ttsHandler    *handlers.TTSHandler
+	ttsHandler     *handlers.TTSHandler
 }
 
 func NewServer(db *gorm.DB, cfg *config.Config) *Server {
@@ -36,12 +36,12 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 	sectionRepo := repositories.NewSectionRepository(db)
 	storyboardRepo := repositories.NewStoryboardRepository(db)
 
-	aiService := ai.NewOpenAIClient(cfg.OpenAIAPIKey)
+	aiService := ai.NewOpenAIClient(cfg.OpenAI.APIKey)
 	storageService := storage.NewQiniuClient(
-		cfg.QiniuConfig.AccessKey,
-		cfg.QiniuConfig.SecretKey,
-		cfg.QiniuConfig.Bucket,
-		cfg.QiniuConfig.Domain,
+		cfg.Qiniu.AccessKey,
+		cfg.Qiniu.SecretKey,
+		cfg.Qiniu.Bucket,
+		cfg.Qiniu.Domain,
 	)
 
 	comicService := services.NewComicService(
@@ -84,6 +84,6 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 }
 
 func (s *Server) Run() error {
-	addr := fmt.Sprintf(":%s", s.config.ServerPort)
+	addr := fmt.Sprintf(":%s", s.config.Server.Port)
 	return s.router.Run(addr)
 }

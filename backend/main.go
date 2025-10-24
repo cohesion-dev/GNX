@@ -5,6 +5,7 @@ import (
 
 	"github.com/cohesion-dev/GNX/backend/config"
 	"github.com/cohesion-dev/GNX/backend/internal/app"
+	"github.com/cohesion-dev/GNX/backend/pkg/database"
 )
 
 func main() {
@@ -13,9 +14,17 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	db, err := config.SetupDatabase(cfg)
+	dbCfg := &database.Config{
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DBName:   cfg.Database.DBName,
+	}
+
+	db, err := database.InitDatabase(dbCfg)
 	if err != nil {
-		log.Fatalf("Failed to setup database: %v", err)
+		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
 	server := app.NewServer(db, cfg)

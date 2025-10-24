@@ -1,0 +1,18 @@
+database:
+  host: localhost
+  port: "5432"
+  user: postgres
+  password: ""
+  dbname: gnx
+
+server:
+  port: "8080"
+
+openai:
+  api_key: ""
+
+qiniu:
+  access_key: ""
+  secret_key: ""
+  bucket: ""
+  domain: ""
