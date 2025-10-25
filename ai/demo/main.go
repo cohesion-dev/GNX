@@ -74,13 +74,26 @@ func main() {
 		}
 
 		fmt.Println("Generating storyboard...")
-		summary, err := aigc.SummaryChapter(context.Background(), gnxaigc.SummaryChapterInput{
-			NovelTitle:            *novelTitle,
-			ChapterTitle:          chapter.Title,
-			Content:               chapter.Content,
-			AvailableVoiceStyles:  availableVoices,
-			CharacterFeatures:     characterFeatures,
-		})
+
+		summaryChapter := func() (*gnxaigc.SummaryChapterOutput, error) {
+			for i := 0; i < 3; i++ {
+				summary, err := aigc.SummaryChapter(context.Background(), gnxaigc.SummaryChapterInput{
+					NovelTitle:           *novelTitle,
+					ChapterTitle:         chapter.Title,
+					Content:              chapter.Content,
+					AvailableVoiceStyles: availableVoices,
+					CharacterFeatures:    characterFeatures,
+				})
+				if err != nil {
+					fmt.Printf("  Error summarizing chapter: %v\n", err)
+					fmt.Println("  Retrying...")
+					continue
+				}
+				return summary, nil
+			}
+			return nil, fmt.Errorf("failed to summarize chapter after retries")
+		}
+		summary, err := summaryChapter()
 		if err != nil {
 			fmt.Printf("Error generating storyboard for chapter %d: %v\n", i+1, err)
 			continue
@@ -131,7 +144,7 @@ func main() {
 				var audioWg sync.WaitGroup
 				for k, segment := range sceneItem.SourceTextSegments {
 					audioWg.Add(1)
-					go func(audioIndex int, audioSegment gnxaigc.TextSegment) {
+					go func(audioIndex int, audioSegment gnxaigc.SourceTextSegment) {
 						defer audioWg.Done()
 
 						mu.Lock()
