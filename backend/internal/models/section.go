@@ -8,6 +8,7 @@ type ComicSection struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
 	ComicID   uint      `json:"comic_id" gorm:"not null"`
 	Index     int       `json:"index" gorm:"not null"`
+	Title     string    `json:"title" gorm:"size:255"`
 	Detail    string    `json:"detail" gorm:"type:text;not null"`
 	Status    string    `json:"status" gorm:"size:20;default:'pending'"`
 	CreatedAt time.Time `json:"created_at"`

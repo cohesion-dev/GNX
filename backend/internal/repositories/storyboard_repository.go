@@ -49,3 +49,13 @@ func (r *StoryboardRepository) UpdateImageURL(id uint, imageURL string) error {
 func (r *StoryboardRepository) UpdateDetailTTSURL(id uint, ttsURL string) error {
 	return r.db.Model(&models.ComicStoryboardDetail{}).Where("id = ?", id).Update("tts_url", ttsURL).Error
 }
+
+func (r *StoryboardRepository) UpdateStatus(id uint, status string) error {
+	return r.db.Model(&models.ComicStoryboard{}).Where("id = ?", id).Update("status", status).Error
+}
+
+func (r *StoryboardRepository) GetByID(id uint) (*models.ComicStoryboard, error) {
+	var storyboard models.ComicStoryboard
+	err := r.db.First(&storyboard, id).Error
+	return &storyboard, err
+}
