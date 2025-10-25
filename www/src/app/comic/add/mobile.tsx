@@ -155,11 +155,11 @@ const ComicAddMobile = () => {
             disabled={!isFormValid || submitting}
             className={`w-full rounded-2xl px-6 py-4 font-bold transition-all ${
               isFormValid && !submitting
-                ? 'bg-gradient-to-r from-[#FFA900] to-[#FFD600] text-slate-900 cursor-pointer hover:opacity-90'
+                ? 'text-white cursor-pointer hover:opacity-90'
                 : 'bg-white/10 text-gray-500 cursor-not-allowed'
             }`}
             style={{
-              backgroundImage: isFormValid && !submitting ? 'linear-gradient(84.22deg, #FFA900 22.7%, #FFD600 85.39%)' : undefined
+              backgroundImage: isFormValid && !submitting ? 'linear-gradient(135deg, #00E5E5 0%, #72A5F2 51.04%, #E961FF 100%)' : undefined
             }}
           >
             {submitting ? (
