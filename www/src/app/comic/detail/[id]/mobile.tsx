@@ -74,7 +74,13 @@ const ComicDetailMobile = () => {
 
   const handleSectionClick = useCallback((section: ComicSection) => {
     if (section.status === 'completed' && params?.id) {
-      router.push(`/comic/read/${params.id}?section-id=${section.id}`)
+      router.push(`/comic/read/${params.id}?section-index=${section.index}`)
+    }
+  }, [router, params?.id])
+
+  const handleAddSectionClick = useCallback(() => {
+    if (params?.id) {
+      router.push(`/comic/detail/${params.id}/section/add`)
     }
   }, [router, params?.id])
 
@@ -137,7 +143,7 @@ const ComicDetailMobile = () => {
         </div>
       </div>
 
-      <div className="px-6 mt-20 pb-6">
+      <div className="px-6 mt-20 pb-24">
         {comic && (
           <div className="bg-white/10 backdrop-blur-md rounded-3xl p-4 mb-6">
             <div className="flex gap-4">
@@ -240,6 +246,30 @@ const ComicDetailMobile = () => {
             </svg>
           </div>
         )}
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/20 backdrop-blur-lg">
+        <div className="flex justify-around py-3 px-6">
+          <button
+            onClick={handleAddSectionClick}
+            className="w-12 h-12 flex items-center justify-center bg-cyan-400/20 backdrop-blur-sm rounded-full cursor-pointer"
+            aria-label="添加章节"
+          >
+            <svg
+              className="w-6 h-6 text-cyan-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   )
