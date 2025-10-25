@@ -39,7 +39,10 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 
 	aiService := ai.NewOpenAIClient(cfg.OpenAI.APIKey)
 	aigcService := gnxaigc.NewGnxAIGC(gnxaigc.Config{
-		APIKey: cfg.OpenAI.APIKey,
+		APIKey:        cfg.OpenAI.APIKey,
+		BaseURL:       cfg.OpenAI.BaseURL,
+		ImageModel:    cfg.OpenAI.ImageModel,
+		LanguageModel: cfg.OpenAI.LanguageModel,
 	})
 	storageService := storage.NewQiniuClient(
 		cfg.Qiniu.AccessKey,
