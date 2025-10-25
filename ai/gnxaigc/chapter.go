@@ -77,6 +77,10 @@ type SourceTextSegment struct {
 	SpeedRatio float64 `json:"speed_ratio"`
 	// 是否为旁白文本片段
 	IsNarration bool `json:"is_narration,omitempty"`
+	// CharacterRefs 标注对应角色画像在本章角色列表中的索引
+	CharacterRefs []int `json:"character_refs,omitempty"`
+	// CharacterNames 冗余记录角色姓名，便于生成端保持一致
+	CharacterNames []string `json:"character_names,omitempty"`
 }
 
 type StoryboardPanel struct {
@@ -202,6 +206,20 @@ func buildStoryboardSchema(maxPanelsPerPage int) map[string]any {
 													"type":        "boolean",
 													"description": "是否为旁白文本片段",
 												},
+												"character_refs": map[string]any{
+													"type":        "array",
+													"description": "可选：标注参与本段的角色索引，引用 character_features 中的顺序（0-based）",
+													"items": map[string]any{
+														"type": "integer",
+													},
+												},
+												"character_names": map[string]any{
+													"type":        "array",
+													"description": "可选：冗余列出角色姓名，需与 character_refs 顺序一致",
+													"items": map[string]any{
+														"type": "string",
+													},
+												},
 											},
 										},
 									},
@@ -308,6 +326,10 @@ func buildSummaryChapterPrompt(input SummaryChapterInput, voiceStylesJSON, schem
 %s
 
 请根据小说内容和情感，将章节拆分成多页，每一页包含 1 至 %d 个分格（panel）。确保页面之间的剧情推进自然，必要时可以增加页数，避免把大量剧情挤在同一页。为每个分格拆分合适的语音文本片段，并为每个片段选择合适的语音风格和语速比例（1.0 为正常语速，>1.0 为加快语速，<1.0 为放慢语速）。
+
+在每个 source_text_segment 中：
+1. 若有角色参与，请在 character_refs 中列出他们在本次输出的 character_features 数组中的索引（从 0 开始），并在 character_names 中按相同顺序写出角色姓名（使用与 basic.name 一致的英文名称）。
+2. 若该片段为纯旁白或没有特定角色，可省略 character_refs 与 character_names 字段。
 
 图像生成以“页”为单位，请：
 1. 为每页提供 layout_hint，明确描述分格在页面上的排列方式（如 2x2 grid、三段纵向排版等）。

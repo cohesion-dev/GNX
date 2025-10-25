@@ -5,14 +5,129 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"unicode"
 
 	"qiniu-ai-image-generator/gnxaigc"
 )
+
+// CharacterAsset tracks the persisted concept art for a role to keep cross-chapter consistency.
+type CharacterAsset struct {
+	Feature   gnxaigc.CharacterFeature
+	ImagePath string
+	Prompt    string
+	FileStem  string
+}
+
+type ChapterCharacterEntry struct {
+	Name            string `json:"name"`
+	ImageFile       string `json:"image_file,omitempty"`
+	PromptFile      string `json:"prompt_file,omitempty"`
+	GlobalImageFile string `json:"global_image_file,omitempty"`
+	GlobalPrompt    string `json:"global_prompt,omitempty"`
+	ConceptArtNotes string `json:"concept_art_notes,omitempty"`
+}
+
+type ChapterCharacterManifest struct {
+	Characters []ChapterCharacterEntry `json:"characters"`
+}
+
+func normalizeCharacterKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func collectOrderedFeatures(order []string, registry map[string]gnxaigc.CharacterFeature) []gnxaigc.CharacterFeature {
+	features := make([]gnxaigc.CharacterFeature, 0, len(order))
+	for _, key := range order {
+		if feature, ok := registry[key]; ok {
+			features = append(features, feature)
+		}
+	}
+	return features
+}
+
+func findCharacterIndex(order []string, key string) int {
+	for idx, existing := range order {
+		if existing == key {
+			return idx
+		}
+	}
+	return -1
+}
+
+func copyFile(src, dst string) error {
+	if src == "" || dst == "" {
+		return fmt.Errorf("copyFile: empty path")
+	}
+	if src == dst {
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
+}
+
+func collectSegmentCharacterKeys(segment gnxaigc.SourceTextSegment, chapterFeatures []gnxaigc.CharacterFeature, seen map[string]struct{}) {
+	appendName := func(name string) {
+		key := normalizeCharacterKey(name)
+		if key == "" {
+			return
+		}
+		seen[key] = struct{}{}
+	}
+
+	for _, name := range segment.CharacterNames {
+		appendName(name)
+	}
+
+	for _, idx := range segment.CharacterRefs {
+		if idx < 0 || idx >= len(chapterFeatures) {
+			continue
+		}
+		appendName(chapterFeatures[idx].Basic.Name)
+	}
+}
+
+func collectPageCharacterKeys(page gnxaigc.StoryboardPage, chapterFeatures []gnxaigc.CharacterFeature) []string {
+	seen := make(map[string]struct{})
+	for _, panel := range page.Panels {
+		for _, segment := range panel.SourceTextSegments {
+			collectSegmentCharacterKeys(segment, chapterFeatures, seen)
+		}
+	}
+
+	keys := make([]string, 0, len(seen))
+	for key := range seen {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 func main() {
 	inputFile := flag.String("input", "", "Path to novel text file")
@@ -59,7 +174,15 @@ func main() {
 	}
 	fmt.Printf("Loaded %d available voices\n", len(availableVoices))
 
-	var characterFeatures []gnxaigc.CharacterFeature
+	characterRegistry := make(map[string]gnxaigc.CharacterFeature)
+	characterOrder := make([]string, 0)
+	characterAssets := make(map[string]*CharacterAsset)
+
+	globalCharacterDir := filepath.Join(*outputDir, "characters")
+	if err := os.MkdirAll(globalCharacterDir, 0755); err != nil {
+		fmt.Printf("Error creating shared character directory: %v\n", err)
+		os.Exit(1)
+	}
 
 	processCount := len(chapters)
 	if *maxChapters > 0 && *maxChapters < processCount {
@@ -78,14 +201,16 @@ func main() {
 
 		fmt.Println("Generating storyboard...")
 
-		summaryChapter := func() (*gnxaigc.SummaryChapterOutput, error) {
-			for i := 0; i < 3; i++ {
+		existingFeatures := collectOrderedFeatures(characterOrder, characterRegistry)
+
+		summaryChapter := func(existing []gnxaigc.CharacterFeature) (*gnxaigc.SummaryChapterOutput, error) {
+			for attempt := 0; attempt < 3; attempt++ {
 				summary, err := aigc.SummaryChapter(context.Background(), gnxaigc.SummaryChapterInput{
 					NovelTitle:           *novelTitle,
 					ChapterTitle:         chapter.Title,
 					Content:              chapter.Content,
 					AvailableVoiceStyles: availableVoices,
-					CharacterFeatures:    characterFeatures,
+					CharacterFeatures:    existing,
 				})
 				if err != nil {
 					fmt.Printf("  Error summarizing chapter: %v\n", err)
@@ -96,23 +221,62 @@ func main() {
 			}
 			return nil, fmt.Errorf("failed to summarize chapter after retries")
 		}
-		summary, err := summaryChapter()
+		summary, err := summaryChapter(existingFeatures)
 		if err != nil {
 			fmt.Printf("Error generating storyboard for chapter %d: %v\n", i+1, err)
 			continue
 		}
 
-		characterFeatures = summary.CharacterFeatures
+		for _, feature := range summary.CharacterFeatures {
+			key := normalizeCharacterKey(feature.Basic.Name)
+			if key == "" {
+				fmt.Println("  Warning: skip unnamed character in summary output")
+				continue
+			}
+			if _, exists := characterRegistry[key]; !exists {
+				characterOrder = append(characterOrder, key)
+			}
+			characterRegistry[key] = feature
+		}
 
 		characterDir := filepath.Join(chapterDir, "characters")
 		if err := os.MkdirAll(characterDir, 0755); err != nil {
 			fmt.Printf("Error creating character directory: %v\n", err)
 		} else {
-			fmt.Printf("Generating %d character concept images...\n", len(summary.CharacterFeatures))
-			for idx, feature := range summary.CharacterFeatures {
+			fmt.Printf("Syncing %d character concept images...\n", len(summary.CharacterFeatures))
+			manifest := ChapterCharacterManifest{}
+			for _, feature := range summary.CharacterFeatures {
+				key := normalizeCharacterKey(feature.Basic.Name)
+				if key == "" {
+					fmt.Println("  Skipping character with empty name in concept art stage")
+					continue
+				}
+
+				globalIdx := findCharacterIndex(characterOrder, key)
+				if globalIdx < 0 {
+					globalIdx = len(characterOrder)
+				}
+
+				asset, hasAsset := characterAssets[key]
+				if !hasAsset {
+					asset = &CharacterAsset{}
+				}
+
+				fileStem := asset.FileStem
+				if fileStem == "" {
+					fileStem = sanitizeCharacterFileStem(feature.Basic.Name, globalIdx)
+				}
+
 				prompt := strings.TrimSpace(feature.ConceptArtPrompt)
 				if prompt == "" {
-					fmt.Printf("  [Character %d] Missing concept_art_prompt for %s, skip.\n", idx+1, feature.Basic.Name)
+					fmt.Printf("  [Character %d] Missing concept_art_prompt for %s, skip image generation.\n", globalIdx+1, feature.Basic.Name)
+					asset.Feature = feature
+					asset.FileStem = fileStem
+					characterAssets[key] = asset
+					manifest.Characters = append(manifest.Characters, ChapterCharacterEntry{
+						Name:            feature.Basic.Name,
+						ConceptArtNotes: feature.ConceptArtNotes,
+					})
 					continue
 				}
 
@@ -121,25 +285,99 @@ func main() {
 				if trimmedStyle != "" {
 					fullPrompt = fmt.Sprintf("%s %s", trimmedStyle, prompt)
 				}
+				fullPrompt = strings.TrimSpace(fullPrompt)
 
-				fmt.Printf("  [Character %d] Generating concept art for %s\n", idx+1, feature.Basic.Name)
-				imageData, err := aigc.GenerateImageByText(context.Background(), fullPrompt)
-				if err != nil {
-					fmt.Printf("    Error generating concept art: %v\n", err)
-					continue
+				globalImageFile := filepath.Join(globalCharacterDir, fmt.Sprintf("%s.png", fileStem))
+				globalPromptFile := filepath.Join(globalCharacterDir, fmt.Sprintf("%s_prompt.txt", fileStem))
+
+				shouldGenerate := strings.TrimSpace(asset.Prompt) == "" || strings.TrimSpace(asset.Feature.ConceptArtPrompt) != prompt || strings.TrimSpace(asset.Prompt) != fullPrompt
+				if !shouldGenerate {
+					if _, err := os.Stat(globalImageFile); err != nil {
+						shouldGenerate = true
+					}
 				}
 
-				fileStem := sanitizeCharacterFileStem(feature.Basic.Name, idx)
-				imageFile := filepath.Join(characterDir, fmt.Sprintf("%s.png", fileStem))
-				if err := os.WriteFile(imageFile, imageData, 0644); err != nil {
-					fmt.Printf("    Error saving concept art: %v\n", err)
+				var freshImage []byte
+				if shouldGenerate {
+					if asset.ImagePath != "" {
+						baseData, err := os.ReadFile(asset.ImagePath)
+						if err != nil {
+							fmt.Printf("  [Character %d] Warning: cannot read existing concept art (%v), fallback to text generation.\n", globalIdx+1, err)
+							freshImage, err = aigc.GenerateImageByText(context.Background(), fullPrompt)
+							if err != nil {
+								fmt.Printf("    Error generating concept art: %v\n", err)
+								continue
+							}
+						} else {
+							fmt.Printf("  [Character %d] Refining concept art via img2img for %s\n", globalIdx+1, feature.Basic.Name)
+							freshImage, err = aigc.GenerateImageByImage(context.Background(), baseData, fullPrompt)
+							if err != nil {
+								fmt.Printf("    Error refining concept art: %v\n", err)
+								fmt.Printf("    Falling back to text-to-image generation.\n")
+								freshImage, err = aigc.GenerateImageByText(context.Background(), fullPrompt)
+								if err != nil {
+									fmt.Printf("    Error generating concept art: %v\n", err)
+									continue
+								}
+							}
+						}
+					} else {
+						fmt.Printf("  [Character %d] Generating concept art from scratch for %s\n", globalIdx+1, feature.Basic.Name)
+						imageData, err := aigc.GenerateImageByText(context.Background(), fullPrompt)
+						if err != nil {
+							fmt.Printf("    Error generating concept art: %v\n", err)
+							continue
+						}
+						freshImage = imageData
+					}
+
+					if err := os.WriteFile(globalImageFile, freshImage, 0644); err != nil {
+						fmt.Printf("    Error saving concept art: %v\n", err)
+						continue
+					}
 				} else {
-					fmt.Printf("    Saved concept art to %s\n", imageFile)
+					fmt.Printf("  [Character %d] Reusing existing concept art for %s\n", globalIdx+1, feature.Basic.Name)
 				}
 
-				promptFile := filepath.Join(characterDir, fmt.Sprintf("%s_prompt.txt", fileStem))
-				if err := os.WriteFile(promptFile, []byte(fullPrompt+"\n"), 0644); err != nil {
+				if err := os.WriteFile(globalPromptFile, []byte(fullPrompt+"\n"), 0644); err != nil {
 					fmt.Printf("    Error saving concept prompt: %v\n", err)
+				}
+
+				asset.Feature = feature
+				asset.FileStem = fileStem
+				asset.ImagePath = globalImageFile
+				asset.Prompt = fullPrompt
+				characterAssets[key] = asset
+
+				chapterImageFile := filepath.Join(characterDir, fmt.Sprintf("%s.png", fileStem))
+				if asset.ImagePath != "" {
+					if err := copyFile(asset.ImagePath, chapterImageFile); err != nil {
+						fmt.Printf("    Error copying concept art to chapter folder: %v\n", err)
+					}
+				}
+
+				chapterPromptFile := filepath.Join(characterDir, fmt.Sprintf("%s_prompt.txt", fileStem))
+				if err := os.WriteFile(chapterPromptFile, []byte(fullPrompt+"\n"), 0644); err != nil {
+					fmt.Printf("    Error writing chapter prompt file: %v\n", err)
+				}
+
+				manifest.Characters = append(manifest.Characters, ChapterCharacterEntry{
+					Name:            feature.Basic.Name,
+					ImageFile:       filepath.Base(chapterImageFile),
+					PromptFile:      filepath.Base(chapterPromptFile),
+					GlobalImageFile: filepath.Base(globalImageFile),
+					GlobalPrompt:    fullPrompt,
+					ConceptArtNotes: feature.ConceptArtNotes,
+				})
+			}
+
+			manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+			if err != nil {
+				fmt.Printf("    Error marshalling chapter character manifest: %v\n", err)
+			} else {
+				manifestPath := filepath.Join(characterDir, "manifest.json")
+				if err := os.WriteFile(manifestPath, manifestBytes, 0644); err != nil {
+					fmt.Printf("    Error writing character manifest: %v\n", err)
 				}
 			}
 		}
@@ -160,7 +398,7 @@ func main() {
 
 		for j, page := range summary.StoryboardPages {
 			wg.Add(1)
-			go func(pageIndex int, pageItem gnxaigc.StoryboardPage, total int) {
+			go func(pageIndex int, pageItem gnxaigc.StoryboardPage, total int, chapterFeatures []gnxaigc.CharacterFeature) {
 				defer wg.Done()
 
 				mu.Lock()
@@ -168,7 +406,53 @@ func main() {
 				mu.Unlock()
 
 				fullPrompt := gnxaigc.ComposePageImagePrompt(*imageStyle, pageItem)
-				imageData, err := aigc.GenerateImageByText(context.Background(), fullPrompt)
+
+				referenceKeys := collectPageCharacterKeys(pageItem, chapterFeatures)
+				var referenceImages [][]byte
+				for _, key := range referenceKeys {
+					asset := characterAssets[key]
+					if asset == nil || asset.ImagePath == "" {
+						continue
+					}
+					data, err := os.ReadFile(asset.ImagePath)
+					if err != nil {
+						mu.Lock()
+						fmt.Printf("    Warning: failed to read reference image for %s: %v\n", asset.Feature.Basic.Name, err)
+						mu.Unlock()
+						continue
+					}
+					referenceImages = append(referenceImages, data)
+				}
+
+				var imageData []byte
+				var err error
+				if len(referenceImages) > 1 {
+					mu.Lock()
+					fmt.Printf("    Using %d reference images for page %d\n", len(referenceImages), pageIndex+1)
+					mu.Unlock()
+					imageData, err = aigc.GenerateImageByImages(context.Background(), referenceImages, fullPrompt)
+					if err != nil {
+						mu.Lock()
+						fmt.Printf("    Error generating page image via multi img2img: %v\n", err)
+						fmt.Printf("    Falling back to text-to-image for page %d\n", pageIndex+1)
+						mu.Unlock()
+						imageData, err = aigc.GenerateImageByText(context.Background(), fullPrompt)
+					}
+				} else if len(referenceImages) == 1 {
+					mu.Lock()
+					fmt.Printf("    Using single reference image for page %d\n", pageIndex+1)
+					mu.Unlock()
+					imageData, err = aigc.GenerateImageByImage(context.Background(), referenceImages[0], fullPrompt)
+					if err != nil {
+						mu.Lock()
+						fmt.Printf("    Error generating page image via img2img: %v\n", err)
+						fmt.Printf("    Falling back to text-to-image for page %d\n", pageIndex+1)
+						mu.Unlock()
+						imageData, err = aigc.GenerateImageByText(context.Background(), fullPrompt)
+					}
+				} else {
+					imageData, err = aigc.GenerateImageByText(context.Background(), fullPrompt)
+				}
 				if err != nil {
 					mu.Lock()
 					fmt.Printf("    Error generating image for page %d: %v\n", pageIndex+1, err)
@@ -236,13 +520,48 @@ func main() {
 					}
 				}
 				audioWg.Wait()
-			}(j, page, totalPages)
+			}(j, page, totalPages, summary.CharacterFeatures)
 		}
 
 		wg.Wait()
 
 		fmt.Printf("Chapter %d completed!\n", i+1)
 	}
+
+	globalManifest := ChapterCharacterManifest{}
+	for _, key := range characterOrder {
+		feature, ok := characterRegistry[key]
+		if !ok {
+			continue
+		}
+		asset := characterAssets[key]
+		entry := ChapterCharacterEntry{
+			Name:            feature.Basic.Name,
+			ConceptArtNotes: feature.ConceptArtNotes,
+		}
+		if asset != nil {
+			entry.GlobalImageFile = filepath.Base(asset.ImagePath)
+			entry.GlobalPrompt = asset.Prompt
+			if asset.FileStem != "" {
+				entry.PromptFile = fmt.Sprintf("%s_prompt.txt", asset.FileStem)
+			}
+		}
+		globalManifest.Characters = append(globalManifest.Characters, entry)
+	}
+
+	if len(globalManifest.Characters) > 0 {
+		manifestBytes, err := json.MarshalIndent(globalManifest, "", "  ")
+		if err != nil {
+			fmt.Printf("Error marshalling global character manifest: %v\n", err)
+		} else {
+			manifestPath := filepath.Join(globalCharacterDir, "manifest.json")
+			if err := os.WriteFile(manifestPath, manifestBytes, 0644); err != nil {
+				fmt.Printf("Error writing global character manifest: %v\n", err)
+			}
+		}
+	}
+
+	fmt.Printf("\nTracked %d unique characters across chapters\n", len(characterOrder))
 
 	fmt.Printf("\n=== Comic Generation Complete ===\n")
 	fmt.Printf("Processed %d chapters\n", processCount)
@@ -265,6 +584,9 @@ func sanitizeCharacterFileStem(name string, index int) string {
 	cleaned := strings.Trim(builder.String(), "_")
 	if cleaned == "" {
 		return fmt.Sprintf("character_%02d", index+1)
+	}
+	if index >= 0 {
+		return fmt.Sprintf("%s_%02d", cleaned, index+1)
 	}
 	return cleaned
 }
