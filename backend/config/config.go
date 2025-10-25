@@ -26,7 +26,10 @@ type ServerConfig struct {
 }
 
 type OpenAIConfig struct {
-	APIKey string `mapstructure:"api_key"`
+	APIKey        string `mapstructure:"api_key"`
+	BaseURL       string `mapstructure:"base_url"`
+	ImageModel    string `mapstructure:"image_model"`
+	LanguageModel string `mapstructure:"language_model"`
 }
 
 type QiniuConfig struct {
@@ -61,6 +64,9 @@ func LoadConfig() (*Config, error) {
 	v.BindEnv("database.dbname", "DB_NAME")
 	v.BindEnv("server.port", "SERVER_PORT")
 	v.BindEnv("openai.api_key", "OPENAI_API_KEY")
+	v.BindEnv("openai.base_url", "OPENAI_BASE_URL")
+	v.BindEnv("openai.image_model", "OPENAI_IMAGE_MODEL")
+	v.BindEnv("openai.language_model", "OPENAI_LANGUAGE_MODEL")
 	v.BindEnv("qiniu.access_key", "QINIU_ACCESS_KEY")
 	v.BindEnv("qiniu.secret_key", "QINIU_SECRET_KEY")
 	v.BindEnv("qiniu.bucket", "QINIU_BUCKET")
