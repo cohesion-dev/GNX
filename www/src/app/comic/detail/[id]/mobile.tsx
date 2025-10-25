@@ -1,17 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { getComic, getComicSections, type ComicDetail, type ComicSection } from '@/apis/comic'
 
-interface ComicDetailMobileProps {
-  params: {
-    id: string
-  }
-}
-
-const ComicDetailMobile = ({ params }: ComicDetailMobileProps) => {
+const ComicDetailMobile = () => {
   const router = useRouter()
+  const params = useParams<{ id: string }>()
   const [comic, setComic] = useState<ComicDetail | null>(null)
   const [sections, setSections] = useState<ComicSection[]>([])
   const [loading, setLoading] = useState(false)
