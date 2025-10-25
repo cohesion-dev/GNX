@@ -71,7 +71,19 @@ func TestSummaryChapter(t *testing.T) {
 		AvailableVoiceStyles: voiceItems,
 	})
 	require.NoError(t, err)
-	require.Greater(t, len(resp.StoryboardItems), 0)
+	require.Greater(t, len(resp.StoryboardPages), 0)
+	for _, page := range resp.StoryboardPages {
+		require.GreaterOrEqual(t, len(page.Panels), minPanelsPerPage)
+		require.LessOrEqual(t, len(page.Panels), defaultMaxPanelsPerPage)
+		require.NotEmpty(t, page.LayoutHint)
+		require.NotEmpty(t, page.ImagePrompt)
+		for _, panel := range page.Panels {
+			require.NotEmpty(t, panel.SourceTextSegments)
+			require.NotEmpty(t, panel.VisualPrompt)
+		}
+		prompt := ComposePageImagePrompt("", page)
+		require.NotEmpty(t, prompt)
+	}
 	fmt.Printf("%+v\n", resp)
 }
 

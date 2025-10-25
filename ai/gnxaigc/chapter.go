@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	jsonrepair "github.com/RealAlexandreAI/json-repair"
 	"github.com/openai/openai-go/v3"
@@ -57,6 +58,8 @@ type SummaryChapterInput struct {
 	AvailableVoiceStyles []TTSVoiceItem
 	// 已有角色人设与多模态锚点信息
 	CharacterFeatures []CharacterFeature
+	// MaxPanelsPerPage 控制单页内的最大分格数量，默认四格，至少一格
+	MaxPanelsPerPage int
 }
 
 type SourceTextSegment struct {
@@ -72,81 +75,155 @@ type SourceTextSegment struct {
 	IsNarration bool `json:"is_narration,omitempty"`
 }
 
-type StoryboardItem struct {
+type StoryboardPanel struct {
 	// 分镜的原文文本片段，因为一段话可能有不同的语音形式故需要分割
 	SourceTextSegments []SourceTextSegment `json:"source_text_segments"`
-	// 用于提供给文生图大模型的提示词
+	// PanelSummary 用于概述此分格的关键情节（可选）
+	PanelSummary string `json:"panel_summary,omitempty"`
+	// VisualPrompt 详细描述该分格的主要视觉元素与构图
+	VisualPrompt string `json:"visual_prompt"`
+}
+
+type StoryboardPage struct {
+	// 单页内的多个分格，保持 1-4 个结构
+	Panels []StoryboardPanel `json:"panels"`
+	// LayoutHint 描述分格排列方式，如 "2x2 grid"、"vertical triptych"
+	LayoutHint string `json:"layout_hint"`
+	// 用于提供给文生图大模型的提示词（按页生成）
 	ImagePrompt string `json:"image_prompt"`
+	// PageSummary 概述整页节奏（可选）
+	PageSummary string `json:"page_summary,omitempty"`
 }
 
 type SummaryChapterOutput struct {
-	// 分镜列表
-	StoryboardItems []StoryboardItem `json:"storyboard_items"`
+	// 分页分镜列表
+	StoryboardPages []StoryboardPage `json:"storyboard_pages"`
 	// 输出的角色画像更新
 	CharacterFeatures []CharacterFeature `json:"character_features"`
 }
 
-func (g *GnxAIGC) SummaryChapter(ctx context.Context, input SummaryChapterInput) (*SummaryChapterOutput, error) {
-	jsonSchema := map[string]any{
+const (
+	defaultMaxPanelsPerPage = 4
+	minPanelsPerPage        = 1
+)
+
+func maxPanelsPerPageOrDefault(limit int) int {
+	if limit < minPanelsPerPage {
+		return defaultMaxPanelsPerPage
+	}
+	return limit
+}
+
+func buildVoiceStylesJSON(items []TTSVoiceItem) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+	bs, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return "[]"
+	}
+	return string(bs)
+}
+
+func buildStoryboardSchema(maxPanelsPerPage int) map[string]any {
+	return map[string]any{
 		"type":     "object",
-		"required": []string{"storyboard_items"},
+		"required": []string{"storyboard_pages"},
 		"properties": map[string]any{
-			"storyboard_items": map[string]any{
-				"type": "array",
+			"storyboard_pages": map[string]any{
+				"type":     "array",
+				"minItems": 1,
 				"items": map[string]any{
 					"type": "object",
 					"required": []string{
-						"source_text_segments",
+						"panels",
+						"layout_hint",
 						"image_prompt",
 					},
 					"properties": map[string]any{
-						"source_text_segments": map[string]any{
+						"panels": map[string]any{
 							"type":        "array",
-							"description": "该分镜对应的多个语音文本片段及其配音选择。如一句话中可能包含旁白和对话，需要分成多个文本片段分别处理。",
+							"description": "单页内的多个分格，保持 1-4 个结构。",
+							"minItems":    minPanelsPerPage,
+							"maxItems":    maxPanelsPerPage,
 							"items": map[string]any{
 								"type": "object",
 								"required": []string{
-									"text",
-									"voice_name",
-									"voice_type",
-									"speed_ratio",
-									"is_narration",
+									"source_text_segments",
+									"visual_prompt",
 								},
 								"properties": map[string]any{
-									"text": map[string]any{
+									"source_text_segments": map[string]any{
+										"type":        "array",
+										"description": "该分镜对应的多个语音文本片段及其配音选择。如一句话中可能包含旁白和对话，需要分成多个文本片段分别处理。",
+										"minItems":    1,
+										"items": map[string]any{
+											"type": "object",
+											"required": []string{
+												"text",
+												"voice_name",
+												"voice_type",
+												"speed_ratio",
+												"is_narration",
+											},
+											"properties": map[string]any{
+												"text": map[string]any{
+													"type":        "string",
+													"description": "分镜对应的语音文本片段",
+												},
+												"voice_name": map[string]any{
+													"type":        "string",
+													"description": "该文本片段的语音风格描述",
+												},
+												"voice_type": map[string]any{
+													"type":        "string",
+													"description": "该文本片段的音色类型",
+												},
+												"speed_ratio": map[string]any{
+													"type":        "number",
+													"description": "语速比例",
+												},
+												"is_narration": map[string]any{
+													"type":        "boolean",
+													"description": "是否为旁白文本片段",
+												},
+											},
+										},
+									},
+									"panel_summary": map[string]any{
 										"type":        "string",
-										"description": "分镜对应的语音文本片段",
+										"description": "可选：概述该分格的关键情节",
 									},
-									"voice_name": map[string]any{
+									"visual_prompt": map[string]any{
 										"type":        "string",
-										"description": "该文本片段的语音风格描述",
-									},
-									"voice_type": map[string]any{
-										"type":        "string",
-										"description": "该文本片段的音色类型",
-									},
-									"speed_ratio": map[string]any{
-										"type":        "number",
-										"description": "语速比例",
-									},
-									"is_narration": map[string]any{
-										"type":        "boolean",
-										"description": "是否为旁白文本片段",
+										"description": "详细描述该分格需要呈现的视觉元素、构图与角色动作，建议使用英文描述。",
 									},
 								},
 							},
 						},
+						"layout_hint": map[string]any{
+							"type":        "string",
+							"description": "描述分格排列方式，例如 '2x2 grid'、'3-panel vertical strip'。",
+						},
 						"image_prompt": map[string]any{
 							"type":        "string",
-							"description": "用于生成该分镜图像的提示词，建议使用英文描述，以便更好地兼容主流文生图大模型。",
+							"description": "用于生成该页图像的提示词，建议使用英文描述，并确保整页风格统一。",
+						},
+						"page_summary": map[string]any{
+							"type":        "string",
+							"description": "可选：概述整页的节奏或视觉重点。",
 						},
 					},
 				},
 			},
 		},
 	}
+}
 
-	prompt := fmt.Sprintf(`
+func buildSummaryChapterPrompt(input SummaryChapterInput, voiceStylesJSON, schemaJSON string, maxPanelsPerPage int) string {
+	novelTitle := input.NovelTitle
+	chapterTitle := input.ChapterTitle
+	return fmt.Sprintf(`
 你是一个擅长从小说生成动漫分镜和配音选择的设计师，后续用户将给你每一章的小说原文，你需要按指定的输出格式进行输出。
 
 当前用户选择的小说标题为：《%s》，章节标题为：《%s》。如果你熟悉该小说的背景设定和角色人设，也可以结合你已有的知识进行参考。
@@ -155,25 +232,35 @@ func (g *GnxAIGC) SummaryChapter(ctx context.Context, input SummaryChapterInput)
 
 %s
 
-请根据小说内容和情感，合理分割文本片段，并为每个片段选择合适的语音风格和语速比例（1.0为正常语速，>1.0为加快语速，<1.0为放慢语速）。
+请根据小说内容和情感，将章节拆分成多页，每一页包含 1 至 %d 个分格（panel）。确保页面之间的剧情推进自然，必要时可以增加页数，避免把大量剧情挤在同一页。为每个分格拆分合适的语音文本片段，并为每个片段选择合适的语音风格和语速比例（1.0 为正常语速，>1.0 为加快语速，<1.0 为放慢语速）。
 
-分镜设计时，请根据小说内容生成每个分镜的图像提示词，确保提示词能够准确描述该分镜的场景和氛围，并且相邻的分镜的场景一般不会突变，请尽可能输出详细的提示词，以保持一致性，这将用于后续提供给文生图大模型生成图像。
+图像生成以“页”为单位，请：
+1. 为每页提供 layout_hint，明确描述分格在页面上的排列方式（如 2x2 grid、三段纵向排版等）。
+2. 为每个分格提供 visual_prompt，详细描述该分格的画面构图、角色姿态、表情、关键道具与背景信息。
+3. 在 image_prompt 中，总结整页应呈现的整体风格、氛围与需要统一的视觉要素，并说明应绘制为多分格漫画页面，保持 panel 之间通过细边框分隔。
+4. 所有 layout_hint、visual_prompt 与 image_prompt 必须使用英语描述，不得出现任何中文字符，也不要提示模型在图像中加入文字。
 
 请严格按照以下给定的JSONSchema, 仅输出一个合法的 JSON 对象, 不要包含任何前导或后续的说明文字、代码块标记、引号等进行输出结果的编写，确保输出内容**严格符合JSONSchema的要求**且格式正确:
 
 %s
 `,
-		input.NovelTitle,
-		input.ChapterTitle,
-		func() string {
-			voiceStylesJSON, _ := json.MarshalIndent(input.AvailableVoiceStyles, "", "  ")
-			return string(voiceStylesJSON)
-		}(),
-		func() string {
-			jsonSchemaBytes, _ := json.MarshalIndent(jsonSchema, "", "  ")
-			return string(jsonSchemaBytes)
-		}(),
+		novelTitle,
+		chapterTitle,
+		voiceStylesJSON,
+		maxPanelsPerPage,
+		schemaJSON,
 	)
+}
+
+func (g *GnxAIGC) SummaryChapter(ctx context.Context, input SummaryChapterInput) (*SummaryChapterOutput, error) {
+	maxPanelsPerPage := maxPanelsPerPageOrDefault(input.MaxPanelsPerPage)
+	jsonSchema := buildStoryboardSchema(maxPanelsPerPage)
+	jsonSchemaBytes, err := json.MarshalIndent(jsonSchema, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal json schema: %w", err)
+	}
+	voiceStylesJSON := buildVoiceStylesJSON(input.AvailableVoiceStyles)
+	prompt := buildSummaryChapterPrompt(input, voiceStylesJSON, string(jsonSchemaBytes), maxPanelsPerPage)
 
 	resp, err := g.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model: g.LanguageModel,
@@ -226,4 +313,44 @@ func (g *GnxAIGC) SummaryChapter(ctx context.Context, input SummaryChapterInput)
 	}
 
 	return &output, nil
+}
+
+// ComposePageImagePrompt 将页面级别的图像提示词与分格视觉描述整合，强化多分格漫画的布局指令。
+func ComposePageImagePrompt(stylePrefix string, page StoryboardPage) string {
+	var builder strings.Builder
+
+	appendWithSpace := func(text string) {
+		if text == "" {
+			return
+		}
+		if builder.Len() > 0 && !strings.HasSuffix(builder.String(), " ") {
+			builder.WriteString(" ")
+		}
+		builder.WriteString(text)
+	}
+
+	appendWithSpace(strings.TrimSpace(stylePrefix))
+	appendWithSpace(strings.TrimSpace(page.ImagePrompt))
+
+	layout := strings.TrimSpace(page.LayoutHint)
+	if layout == "" {
+		layout = fmt.Sprintf("%d panels comic layout", len(page.Panels))
+	}
+
+	appendWithSpace(fmt.Sprintf("Comic page layout: %s with clear gutters and panel borders.", layout))
+
+	for idx, panel := range page.Panels {
+		visual := strings.TrimSpace(panel.VisualPrompt)
+		if visual == "" {
+			visual = strings.TrimSpace(panel.PanelSummary)
+		}
+		if visual == "" {
+			continue
+		}
+		appendWithSpace(fmt.Sprintf("Panel %d: %s", idx+1, visual))
+	}
+
+	appendWithSpace("Use English-only descriptive language. No Chinese characters or typography. Avoid rendering any on-screen text.")
+
+	return strings.TrimSpace(builder.String())
 }
