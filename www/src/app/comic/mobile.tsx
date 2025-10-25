@@ -26,7 +26,7 @@ const testList = [
 
 const ComicListMobile = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-800 to-purple-900 text-white">
+    <div className="min-h-screen text-white">
       <div className="px-6 py-4 pt-12 text-center">
         <h1 className="text-xl font-bold">列表</h1>
       </div>
