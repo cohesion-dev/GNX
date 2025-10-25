@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS `comic_storyboard_page` (
   `page_summary` TEXT COMMENT '页面摘要',
   
   -- Business fields
-  `image_url` VARCHAR(500) COMMENT '整页漫画图URL',
   `status` VARCHAR(20) DEFAULT 'pending' COMMENT '状态: pending, completed, failed',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -36,6 +35,7 @@ CREATE TABLE IF NOT EXISTS `comic_storyboard_panel` (
   `panel_summary` TEXT COMMENT '分格情节摘要',
   
   -- Business fields
+  `image_url` VARCHAR(500) COMMENT '分格图片URL',
   `status` VARCHAR(20) DEFAULT 'pending' COMMENT '状态: pending, completed, failed',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -54,12 +54,7 @@ CREATE TABLE IF NOT EXISTS `source_text_segment` (
   
   -- AI interface aligned fields (complete field alignment)
   `text` TEXT NOT NULL COMMENT '语音文本片段',
-  `voice_name` VARCHAR(100) NOT NULL COMMENT '语音风格描述',
-  `voice_type` VARCHAR(100) NOT NULL COMMENT '音色类型',
-  `speed_ratio` DOUBLE NOT NULL DEFAULT 1.0 COMMENT '语速比例',
-  `is_narration` BOOLEAN DEFAULT FALSE COMMENT '是否为旁白',
   `character_refs` TEXT COMMENT '角色索引数组（JSON格式）',
-  `character_names` TEXT COMMENT '角色姓名数组（JSON格式）',
   
   -- Business fields
   `tts_url` VARCHAR(500) COMMENT 'TTS音频URL',

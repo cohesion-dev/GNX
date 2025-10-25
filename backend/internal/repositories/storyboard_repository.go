@@ -69,6 +69,10 @@ func (r *StoryboardRepository) UpdatePageStatus(pageID uint, status string) erro
 	return r.db.Model(&models.ComicStoryboardPage{}).Where("id = ?", pageID).Update("status", status).Error
 }
 
+func (r *StoryboardRepository) UpdatePanelImageURL(panelID uint, imageURL string) error {
+	return r.db.Model(&models.ComicStoryboardPanel{}).Where("id = ?", panelID).Update("image_url", imageURL).Error
+}
+
 func (r *StoryboardRepository) UpdatePanelStatus(panelID uint, status string) error {
 	return r.db.Model(&models.ComicStoryboardPanel{}).Where("id = ?", panelID).Update("status", status).Error
 }

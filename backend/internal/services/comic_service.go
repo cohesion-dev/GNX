@@ -255,7 +255,6 @@ func (s *ComicService) processSection(comicID uint, section utils.Section) error
 
 			for segIdx, aiSegment := range aiPanel.SourceTextSegments {
 				characterRefsJSON, _ := json.Marshal(aiSegment.CharacterRefs)
-				characterNamesJSON, _ := json.Marshal(aiSegment.CharacterNames)
 
 				var roleID *uint
 				if len(aiSegment.CharacterRefs) > 0 && aiSegment.CharacterRefs[0] < len(output.CharacterFeatures) {
@@ -266,29 +265,21 @@ func (s *ComicService) processSection(comicID uint, section utils.Section) error
 				}
 
 				segment := &models.SourceTextSegment{
-					PanelID:        panel.ID,
-					Index:          segIdx + 1,
-					Text:           aiSegment.Text,
-					VoiceName:      aiSegment.VoiceName,
-					VoiceType:      aiSegment.VoiceType,
-					SpeedRatio:     aiSegment.SpeedRatio,
-					IsNarration:    aiSegment.IsNarration,
-					CharacterRefs:  string(characterRefsJSON),
-					CharacterNames: string(characterNamesJSON),
-					RoleID:         roleID,
+					PanelID:       panel.ID,
+					Index:         segIdx + 1,
+					Text:          aiSegment.Text,
+					CharacterRefs: string(characterRefsJSON),
+					RoleID:        roleID,
 				}
 
 				if err := s.storyboardRepo.CreateSegment(segment); err != nil {
 					continue
 				}
-
-				go s.generateTTS(segment.ID, aiSegment.Text, aiSegment.VoiceType, aiSegment.SpeedRatio)
 			}
 
-			s.storyboardRepo.UpdatePanelStatus(panel.ID, "completed")
+			go s.generatePanelImage(panel.ID, aiPanel)
 		}
 
-		go s.generatePageImage(page.ID, aiPage)
 	}
 
 	s.sectionRepo.UpdateStatus(comicSection.ID, "completed")
@@ -339,44 +330,26 @@ func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.
 	return roleMap
 }
 
-func (s *ComicService) generatePageImage(pageID uint, aiPage gnxaigc.StoryboardPage) {
+func (s *ComicService) generatePanelImage(panelID uint, aiPanel gnxaigc.StoryboardPanel) {
 	ctx := context.Background()
 
-	fullPrompt := gnxaigc.ComposePageImagePrompt("", aiPage)
-	
-	imageData, err := s.aigcService.GenerateImageByText(ctx, fullPrompt)
+	imageData, err := s.aigcService.GenerateImageByText(ctx, aiPanel.VisualPrompt)
 	if err != nil {
-		s.storyboardRepo.UpdatePageStatus(pageID, "failed")
+		s.storyboardRepo.UpdatePanelStatus(panelID, "failed")
 		return
 	}
 
-	imageKey := fmt.Sprintf("pages/%d_%d.png", pageID, time.Now().Unix())
+	imageKey := fmt.Sprintf("panels/%d_%d.png", panelID, time.Now().Unix())
 	imageURL, err := s.storageService.UploadImage(imageKey, imageData)
 	if err != nil {
-		s.storyboardRepo.UpdatePageStatus(pageID, "failed")
+		s.storyboardRepo.UpdatePanelStatus(panelID, "failed")
 		return
 	}
 
-	s.storyboardRepo.UpdatePageImageURL(pageID, imageURL)
-	s.storyboardRepo.UpdatePageStatus(pageID, "completed")
+	s.storyboardRepo.UpdatePanelImageURL(panelID, imageURL)
+	s.storyboardRepo.UpdatePanelStatus(panelID, "completed")
 }
 
-func (s *ComicService) generateTTS(detailID uint, text, voiceType string, speedRatio float64) {
-	ctx := context.Background()
-
-	audioData, err := s.aigcService.TextToSpeechSimple(ctx, text, voiceType, speedRatio)
-	if err != nil {
-		return
-	}
-
-	audioKey := fmt.Sprintf("tts/%d_%d.mp3", detailID, time.Now().Unix())
-	audioURL, err := s.storageService.UploadAudio(audioKey, audioData)
-	if err != nil {
-		return
-	}
-
-	s.storyboardRepo.UpdateDetailTTSURL(detailID, audioURL)
-}
 
 func (s *ComicService) generateComicIconAndBg(comicID uint) {
 	ctx := context.Background()

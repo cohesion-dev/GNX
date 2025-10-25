@@ -13,6 +13,7 @@ type ComicStoryboardPanel struct {
 	VisualPrompt string `json:"visual_prompt" gorm:"type:text;not null"`
 	PanelSummary string `json:"panel_summary,omitempty" gorm:"type:text"`
 	
+	ImageURL  string    `json:"image_url" gorm:"size:500"`
 	Status    string    `json:"status" gorm:"size:20;default:'pending'"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -31,13 +32,8 @@ type SourceTextSegment struct {
 	PanelID uint `json:"panel_id" gorm:"not null;index:idx_panel_segment"`
 	Index   int  `json:"index" gorm:"not null"`
 	
-	Text           string  `json:"text" gorm:"type:text;not null"`
-	VoiceName      string  `json:"voice_name" gorm:"size:100;not null"`
-	VoiceType      string  `json:"voice_type" gorm:"size:100;not null"`
-	SpeedRatio     float64 `json:"speed_ratio" gorm:"not null;default:1.0"`
-	IsNarration    bool    `json:"is_narration,omitempty" gorm:"default:false"`
-	CharacterRefs  string  `json:"character_refs,omitempty" gorm:"type:text"`
-	CharacterNames string  `json:"character_names,omitempty" gorm:"type:text"`
+	Text          string `json:"text" gorm:"type:text;not null"`
+	CharacterRefs string `json:"character_refs,omitempty" gorm:"type:text"`
 	
 	TTSUrl    string    `json:"tts_url,omitempty" gorm:"size:500"`
 	RoleID    *uint     `json:"role_id,omitempty" gorm:"index"`

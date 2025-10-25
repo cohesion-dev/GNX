@@ -13,7 +13,6 @@ type ComicStoryboardPage struct {
 	LayoutHint  string `json:"layout_hint" gorm:"type:text;not null"`
 	PageSummary string `json:"page_summary,omitempty" gorm:"type:text"`
 	
-	ImageURL  string    `json:"image_url" gorm:"size:500"`
 	Status    string    `json:"status" gorm:"size:20;default:'pending'"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
