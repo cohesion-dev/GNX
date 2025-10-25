@@ -1,30 +1,80 @@
 package services
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"time"
 
+	"github.com/cohesion-dev/GNX/ai/gnxaigc"
 	"github.com/cohesion-dev/GNX/backend/internal/repositories"
+	"github.com/cohesion-dev/GNX/backend/pkg/storage"
 )
 
 type TTSService struct {
 	storyboardRepo *repositories.StoryboardRepository
+	aigcService    *gnxaigc.GnxAIGC
+	storageService *storage.QiniuClient
 }
 
-func NewTTSService(storyboardRepo *repositories.StoryboardRepository) *TTSService {
+func NewTTSService(
+	storyboardRepo *repositories.StoryboardRepository,
+	aigcService *gnxaigc.GnxAIGC,
+	storageService *storage.QiniuClient,
+) *TTSService {
 	return &TTSService{
 		storyboardRepo: storyboardRepo,
+		aigcService:    aigcService,
+		storageService: storageService,
 	}
 }
 
-func (s *TTSService) GetTTSAudio(detailID uint) (string, error) {
+func (s *TTSService) GetTTSAudio(detailID uint) ([]byte, error) {
 	detail, err := s.storyboardRepo.GetDetailByID(detailID)
 	if err != nil {
-		return "", fmt.Errorf("TTS detail not found: %w", err)
+		return nil, fmt.Errorf("TTS detail not found: %w", err)
 	}
 
-	if detail.TTSUrl == "" {
-		return "", fmt.Errorf("TTS audio not yet generated")
+	if detail.TTSUrl != "" {
+		resp, err := http.Get(detail.TTSUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch cached audio: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to fetch cached audio: status %d", resp.StatusCode)
+		}
+
+		audioData, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read cached audio: %w", err)
+		}
+
+		return audioData, nil
 	}
 
-	return detail.TTSUrl, nil
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	audioData, err := s.aigcService.TextToSpeechSimple(ctx, detail.Text, detail.VoiceType, detail.SpeedRatio)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate TTS audio: %w", err)
+	}
+
+	go s.uploadAndSaveURL(detailID, audioData)
+
+	return audioData, nil
+}
+
+func (s *TTSService) uploadAndSaveURL(detailID uint, audioData []byte) {
+	key := fmt.Sprintf("tts/%d_%d.mp3", detailID, time.Now().Unix())
+
+	url, err := s.storageService.UploadAudio(key, audioData)
+	if err != nil {
+		return
+	}
+
+	_ = s.storyboardRepo.UpdateDetailTTSURL(detailID, url)
 }
