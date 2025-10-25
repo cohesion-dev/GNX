@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -222,46 +223,81 @@ func (s *ComicService) processSection(comicID uint, section utils.Section) error
 		return err
 	}
 
-	s.updateCharacterFeatures(comicID, output.CharacterFeatures)
+	roleMap := s.updateCharacterFeatures(comicID, output.CharacterFeatures)
 
-	for idx, storyboardItem := range output.StoryboardItems {
-		storyboard := &models.ComicStoryboard{
+	for pageIdx, aiPage := range output.StoryboardPages {
+		page := &models.ComicStoryboardPage{
 			SectionID:   comicSection.ID,
-			Index:       idx + 1,
-			ImagePrompt: storyboardItem.ImagePrompt,
+			Index:       pageIdx + 1,
+			ImagePrompt: aiPage.ImagePrompt,
+			LayoutHint:  aiPage.LayoutHint,
+			PageSummary: aiPage.PageSummary,
 			Status:      "pending",
 		}
 
-		if err := s.storyboardRepo.Create(storyboard); err != nil {
+		if err := s.storyboardRepo.CreatePage(page); err != nil {
 			continue
 		}
 
-		for detailIdx, segment := range storyboardItem.SourceTextSegments {
-			detail := &models.ComicStoryboardDetail{
-				StoryboardID: storyboard.ID,
-				Index:        detailIdx + 1,
-				Text:         segment.Text,
-				VoiceName:    segment.VoiceName,
-				VoiceType:    segment.VoiceType,
-				SpeedRatio:   segment.SpeedRatio,
-				IsNarration:  segment.IsNarration,
+		for panelIdx, aiPanel := range aiPage.Panels {
+			panel := &models.ComicStoryboardPanel{
+				SectionID:    comicSection.ID,
+				PageID:       page.ID,
+				Index:        panelIdx + 1,
+				VisualPrompt: aiPanel.VisualPrompt,
+				PanelSummary: aiPanel.PanelSummary,
+				Status:       "pending",
 			}
 
-			if err := s.storyboardRepo.CreateDetail(detail); err != nil {
+			if err := s.storyboardRepo.CreatePanel(panel); err != nil {
 				continue
 			}
 
-			go s.generateTTS(detail.ID, segment.Text, segment.VoiceType, segment.SpeedRatio)
+			for segIdx, aiSegment := range aiPanel.SourceTextSegments {
+				characterRefsJSON, _ := json.Marshal(aiSegment.CharacterRefs)
+				characterNamesJSON, _ := json.Marshal(aiSegment.CharacterNames)
+
+				var roleID *uint
+				if len(aiSegment.CharacterRefs) > 0 && aiSegment.CharacterRefs[0] < len(output.CharacterFeatures) {
+					characterName := output.CharacterFeatures[aiSegment.CharacterRefs[0]].Basic.Name
+					if id, exists := roleMap[characterName]; exists {
+						roleID = &id
+					}
+				}
+
+				segment := &models.SourceTextSegment{
+					PanelID:        panel.ID,
+					Index:          segIdx + 1,
+					Text:           aiSegment.Text,
+					VoiceName:      aiSegment.VoiceName,
+					VoiceType:      aiSegment.VoiceType,
+					SpeedRatio:     aiSegment.SpeedRatio,
+					IsNarration:    aiSegment.IsNarration,
+					CharacterRefs:  string(characterRefsJSON),
+					CharacterNames: string(characterNamesJSON),
+					RoleID:         roleID,
+				}
+
+				if err := s.storyboardRepo.CreateSegment(segment); err != nil {
+					continue
+				}
+
+				go s.generateTTS(segment.ID, aiSegment.Text, aiSegment.VoiceType, aiSegment.SpeedRatio)
+			}
+
+			s.storyboardRepo.UpdatePanelStatus(panel.ID, "completed")
 		}
 
-		go s.generateStoryboardImage(storyboard.ID, storyboardItem.ImagePrompt)
+		go s.generatePageImage(page.ID, aiPage)
 	}
 
 	s.sectionRepo.UpdateStatus(comicSection.ID, "completed")
 	return nil
 }
 
-func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.CharacterFeature) {
+func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.CharacterFeature) map[string]uint {
+	roleMap := make(map[string]uint)
+	
 	for _, feature := range features {
 		existingRole, err := s.roleRepo.GetByNameAndComicID(feature.Basic.Name, comicID)
 		if err != nil || existingRole == nil {
@@ -279,7 +315,9 @@ func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.
 				SpeedRatio:   feature.TTS.SpeedRatio,
 				Brief:        feature.Comment,
 			}
-			s.roleRepo.Create(role)
+			if err := s.roleRepo.Create(role); err == nil {
+				roleMap[role.Name] = role.ID
+			}
 		} else {
 			updates := map[string]interface{}{
 				"gender":        feature.Basic.Gender,
@@ -294,28 +332,33 @@ func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.
 				"brief":         feature.Comment,
 			}
 			s.roleRepo.UpdateByID(existingRole.ID, updates)
+			roleMap[existingRole.Name] = existingRole.ID
 		}
 	}
+	
+	return roleMap
 }
 
-func (s *ComicService) generateStoryboardImage(storyboardID uint, imagePrompt string) {
+func (s *ComicService) generatePageImage(pageID uint, aiPage gnxaigc.StoryboardPage) {
 	ctx := context.Background()
 
-	imageData, err := s.aigcService.GenerateImageByText(ctx, imagePrompt)
+	fullPrompt := gnxaigc.ComposePageImagePrompt("", aiPage)
+	
+	imageData, err := s.aigcService.GenerateImageByText(ctx, fullPrompt)
 	if err != nil {
-		s.storyboardRepo.UpdateStatus(storyboardID, "failed")
+		s.storyboardRepo.UpdatePageStatus(pageID, "failed")
 		return
 	}
 
-	imageKey := fmt.Sprintf("storyboards/%d_%d.png", storyboardID, time.Now().Unix())
+	imageKey := fmt.Sprintf("pages/%d_%d.png", pageID, time.Now().Unix())
 	imageURL, err := s.storageService.UploadImage(imageKey, imageData)
 	if err != nil {
-		s.storyboardRepo.UpdateStatus(storyboardID, "failed")
+		s.storyboardRepo.UpdatePageStatus(pageID, "failed")
 		return
 	}
 
-	s.storyboardRepo.UpdateImageURL(storyboardID, imageURL)
-	s.storyboardRepo.UpdateStatus(storyboardID, "completed")
+	s.storyboardRepo.UpdatePageImageURL(pageID, imageURL)
+	s.storyboardRepo.UpdatePageStatus(pageID, "completed")
 }
 
 func (s *ComicService) generateTTS(detailID uint, text, voiceType string, speedRatio float64) {
