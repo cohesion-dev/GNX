@@ -132,10 +132,7 @@ func (s *ComicService) processComicGeneration(comicID uint, content []byte) {
 		}
 	}
 
-	comic, _ := s.comicRepo.GetByIDWithRelations(comicID)
-	if !comic.HasMoreContent {
-		s.generateComicIconAndBg(comicID)
-	}
+	s.generateComicIconAndBg(comicID)
 
 	s.comicRepo.UpdateStatus(comicID, "completed")
 }
