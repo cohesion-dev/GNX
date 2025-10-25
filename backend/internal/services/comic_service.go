@@ -255,8 +255,6 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 			}
 
 			for segIdx, aiSegment := range aiPanel.SourceTextSegments {
-				characterNamesJSON, _ := json.Marshal(aiSegment.CharacterNames)
-
 				var roleID *uint
 				if len(aiSegment.CharacterNames) > 0 {
 					characterName := aiSegment.CharacterNames[0]
@@ -269,7 +267,7 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 					PanelID:       panel.ID,
 					Index:         segIdx + 1,
 					Text:          aiSegment.Text,
-					CharacterRefs: string(characterNamesJSON),
+					CharacterRefs: aiSegment.CharacterNames,
 					RoleID:        roleID,
 				}
 
