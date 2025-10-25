@@ -115,7 +115,7 @@ const ComicAddMobile = () => {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="漫画名字"
+              placeholder="起个名字"
               className="w-full bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
             />
           </div>
@@ -124,7 +124,7 @@ const ComicAddMobile = () => {
             <textarea
               value={userPrompt}
               onChange={(e) => setUserPrompt(e.target.value)}
-              placeholder="文本提示词"
+              placeholder="这次想看点什么? 美型还是水墨, 软萌还是硬朗.."
               rows={4}
               className="w-full bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none"
             />
@@ -155,9 +155,12 @@ const ComicAddMobile = () => {
             disabled={!isFormValid || submitting}
             className={`w-full rounded-2xl px-6 py-4 font-bold transition-all ${
               isFormValid && !submitting
-                ? 'bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 text-white cursor-pointer hover:opacity-90'
+                ? 'bg-gradient-to-r from-[#FFA900] to-[#FFD600] text-slate-900 cursor-pointer hover:opacity-90'
                 : 'bg-white/10 text-gray-500 cursor-not-allowed'
             }`}
+            style={{
+              backgroundImage: isFormValid && !submitting ? 'linear-gradient(84.22deg, #FFA900 22.7%, #FFD600 85.39%)' : undefined
+            }}
           >
             {submitting ? (
               <div className="flex items-center justify-center gap-2">
