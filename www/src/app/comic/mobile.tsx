@@ -178,11 +178,13 @@ const ComicListMobile = () => {
         </div>
       )}
 
-      <div className="px-6 py-4 pt-12 text-center">
-        <h1 className="text-xl font-bold">欢迎回家..</h1>
+      <div className="fixed top-0 left-0 right-0 bg-slate-900/50 backdrop-blur-lg z-40">
+        <div className="px-6 py-4 pt-12 text-center">
+          <h1 className="text-xl font-bold">欢迎回家..</h1>
+        </div>
       </div>
 
-      <div className="px-6 mt-6 space-y-4 pb-24">
+      <div className="px-6 mt-24 space-y-4 pb-24">
         {comics.map((comic) => (
           <div
             key={comic.id}
@@ -248,7 +250,7 @@ const ComicListMobile = () => {
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-lg">
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/50 backdrop-blur-lg">
         <div className="flex justify-around py-3 px-6">
           <button
             onClick={handleAddClick}
