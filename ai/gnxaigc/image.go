@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/openai/openai-go/v3"
@@ -76,6 +77,36 @@ func (g *GnxAIGC) GenerateImageByImage(ctx context.Context, imageData []byte, pr
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to edit image: %w", err)
+	}
+
+	if len(resp.Data) == 0 {
+		return nil, errors.New("no image data received")
+	}
+
+	bs, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image data: %w", err)
+	}
+
+	return bs, nil
+}
+
+func (g *GnxAIGC) GenerateImageByImages(ctx context.Context, imageDatas [][]byte, prompt string) ([]byte, error) {
+	var readers []io.Reader
+	for _, data := range imageDatas {
+		readers = append(readers, bytes.NewReader(data))
+	}
+
+	resp, err := g.client.Images.Edit(ctx, openai.ImageEditParams{
+		Image: openai.ImageEditParamsImageUnion{
+			OfFileArray: readers,
+		},
+		Prompt: prompt,
+		N:      openai.Int(1),
+		Model:  g.ImageModel,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate image variation: %w", err)
 	}
 
 	if len(resp.Data) == 0 {
