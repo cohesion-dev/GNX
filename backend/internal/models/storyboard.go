@@ -32,8 +32,8 @@ type ComicStoryboardSegment struct {
 	PanelID uint `json:"panel_id" gorm:"not null;index:idx_panel_segment"`
 	Index   int  `json:"index" gorm:"not null"`
 	
-	Text          string `json:"text" gorm:"type:text;not null"`
-	CharacterRefs string `json:"character_refs,omitempty" gorm:"type:text"`
+	Text          string   `json:"text" gorm:"type:text;not null"`
+	CharacterRefs []string `json:"character_refs,omitempty" gorm:"type:text[]"`
 	
 	TTSUrl    string    `json:"tts_url,omitempty" gorm:"size:500"`
 	RoleID    *uint     `json:"role_id,omitempty" gorm:"index"`
