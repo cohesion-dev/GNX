@@ -30,14 +30,14 @@ func NewTTSService(
 	}
 }
 
-func (s *TTSService) GetTTSAudio(detailID uint) ([]byte, error) {
-	detail, err := s.storyboardRepo.GetDetailByID(detailID)
+func (s *TTSService) GetTTSAudio(segmentID uint) ([]byte, error) {
+	segment, err := s.storyboardRepo.GetSegmentByID(segmentID)
 	if err != nil {
-		return nil, fmt.Errorf("TTS detail not found: %w", err)
+		return nil, fmt.Errorf("TTS segment not found: %w", err)
 	}
 
-	if detail.TTSUrl != "" {
-		resp, err := http.Get(detail.TTSUrl)
+	if segment.TTSUrl != "" {
+		resp, err := http.Get(segment.TTSUrl)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch cached audio: %w", err)
 		}
@@ -55,26 +55,30 @@ func (s *TTSService) GetTTSAudio(detailID uint) ([]byte, error) {
 		return audioData, nil
 	}
 
+	if segment.Role == nil {
+		return nil, fmt.Errorf("segment has no associated role for TTS")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	audioData, err := s.aigcService.TextToSpeechSimple(ctx, detail.Text, detail.VoiceType, detail.SpeedRatio)
+	audioData, err := s.aigcService.TextToSpeechSimple(ctx, segment.Text, segment.Role.VoiceType, segment.Role.SpeedRatio)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate TTS audio: %w", err)
 	}
 
-	go s.uploadAndSaveURL(detailID, audioData)
+	go s.uploadAndSaveURL(segmentID, audioData)
 
 	return audioData, nil
 }
 
-func (s *TTSService) uploadAndSaveURL(detailID uint, audioData []byte) {
-	key := fmt.Sprintf("tts/%d_%d.mp3", detailID, time.Now().Unix())
+func (s *TTSService) uploadAndSaveURL(segmentID uint, audioData []byte) {
+	key := fmt.Sprintf("tts/%d_%d.mp3", segmentID, time.Now().Unix())
 
 	url, err := s.storageService.UploadAudio(key, audioData)
 	if err != nil {
 		return
 	}
 
-	_ = s.storyboardRepo.UpdateDetailTTSURL(detailID, url)
+	_ = s.storyboardRepo.UpdateSegmentTTSURL(segmentID, url)
 }
