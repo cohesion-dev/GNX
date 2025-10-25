@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"qiniu-ai-image-generator/demo"
 	"qiniu-ai-image-generator/gnxaigc"
 )
 
@@ -32,7 +31,7 @@ func main() {
 
 	aigc := gnxaigc.NewGnxAIGC(gnxaigc.Config{})
 
-	chapters, err := demo.SplitChaptersFromFile(*inputFile)
+	chapters, err := SplitChaptersFromFile(*inputFile)
 	if err != nil {
 		fmt.Printf("Error reading novel file: %v\n", err)
 		os.Exit(1)
@@ -40,12 +39,21 @@ func main() {
 
 	fmt.Printf("Successfully split novel into %d chapters\n", len(chapters))
 
-	availableVoices := []gnxaigc.TTSVoiceItem{
-		{VoiceName: "narrator", VoiceType: "BV700_V2_streaming"},
-		{VoiceName: "male_youth", VoiceType: "BV406_V2_streaming"},
-		{VoiceName: "female_youth", VoiceType: "BV705_V2_streaming"},
-		{VoiceName: "child", VoiceType: "BV051_V2_streaming"},
+	fmt.Println("Fetching available TTS voices...")
+	voiceList, err := aigc.GetVoiceList(context.Background())
+	if err != nil {
+		fmt.Printf("Error fetching voice list: %v\n", err)
+		os.Exit(1)
 	}
+
+	var availableVoices []gnxaigc.TTSVoiceItem
+	for _, voice := range voiceList {
+		availableVoices = append(availableVoices, gnxaigc.TTSVoiceItem{
+			VoiceName: voice.VoiceName,
+			VoiceType: voice.VoiceType,
+		})
+	}
+	fmt.Printf("Loaded %d available voices\n", len(availableVoices))
 
 	var characterFeatures []gnxaigc.CharacterFeature
 

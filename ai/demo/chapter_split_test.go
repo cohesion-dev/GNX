@@ -1,4 +1,4 @@
-package demo
+package main
 
 import (
 	"path/filepath"
