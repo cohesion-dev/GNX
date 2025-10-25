@@ -1,0 +1,2001 @@
+# Historical Comments and Reviews
+
+## Discussion Comments
+
+**@YangSen-qn** (Oct 25, 08:19)
+@xgopilot 数据库增加 storyboard_page 表，返回给前端的章节数据结构也需要做调整，重新设计下
+
+---
+
+**@xgopilot** (Oct 25, 08:19)
+### AI 新结构适配 - 重新设计方案（增加 storyboard_page 表）
+
+## 设计变更说明
+
+根据反馈，重新设计数据库结构：
+- ✅ **新增** `comic_storyboard_page` 表存储页级信息
+- ✅ 调整 `comic_storyboard` 表关联到页表
+- ✅ 重新设计前端 API 返回数据结构
+
+---
+
+## 新的数据库表结构设计
+
+### 1. 新增表：`comic_storyboard_page`（漫画分页表）
+
+```go
+// backend/internal/models/storyboard_page.go (新文件)
+package models
+
+import "time"
+
+// ComicStoryboardPage 漫画章节的分页信息
+// 对应 AI 接口的 StoryboardPage 结构
+type ComicStoryboardPage struct {
+    ID         uint      `json:"id" gorm:"primaryKey"`
+    SectionID  uint      `json:"section_id" gorm:"not null;index:idx_section_page"`
+    Index      int       `json:"index" gorm:"not null"` // 页码（从1开始）
+    
+    // 页面级别的图像生成配置
+    ImagePrompt string    `json:"image_prompt" gorm:"type:text"`     // 整页图像提示词
+    ImageURL    string    `json:"image_url" gorm:"size:500"`         // 生成的整页漫画图
+    
+    // 页面布局与摘要
+    LayoutHint  string    `json:"layout_hint" gorm:"type:text"`      // 布局方式，如 "2x2 grid"
+    PageSummary string    `json:"page_summary,omitempty" gorm:"type:text"` // 页面情节摘要
+    
+    // 状态管理
+    Status     string    `json:"status" gorm:"size:20;default:'pending'"` // pending, completed, failed
+    
+    CreatedAt  time.Time `json:"created_at"`
+    UpdatedAt  time.Time `json:"updated_at"`
+
+    // 关联关系
+    Section    ComicSection      `json:"section,omitempty" gorm:"foreignKey:SectionID"`
+    Panels     []ComicStoryboard `json:"panels,omitempty" gorm:"foreignKey:PageID"` // 该页包含的分格
+}
+
+func (ComicStoryboardPage) TableName() string {
+    return "comic_storyboard_page"
+}
+```
+
+### 2. 修改表：`comic_storyboard`（分格表）
+
+```go
+// backend/internal/models/storyboard.go (修改)
+package models
+
+import "time"
+
+// ComicStoryboard 漫画分格（Panel）
+// 对应 AI 接口的 StoryboardPanel 结构
+type ComicStoryboard struct {
+    ID        uint      `json:"id" gorm:"primaryKey"`
+    
+    // 关联关系
+    SectionID uint      `json:"section_id" gorm:"not null;index:idx_section_panel"`
+    PageID    uint      `json:"page_id" gorm:"not null;index:idx_page_panel"` // 所属页面ID
+    
+    Index     int       `json:"index" gorm:"not null"` // 分格在页面中的索引（从1开始）
+    
+    // 分格级别的图像配置
+    VisualPrompt string    `json:"visual_prompt" gorm:"type:text"`    // 分格视觉描述
+    PanelSummary string    `json:"panel_summary,omitempty" gorm:"type:text"` // 分格情节摘要
+    
+    // 为兼容旧代码保留的字段
+    ImagePrompt string    `json:"image_prompt,omitempty" gorm:"type:text"` // 可选：分格独立图像提示词
+    ImageURL    string    `json:"image_url,omitempty" gorm:"size:500"`     // 可选：分格独立图（暂不使用）
+    Status      string    `json:"status" gorm:"size:20;default:'pending'"`
+    
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+
+    // 关联关系
+    Section ComicSection            `json:"section,omitempty" gorm:"foreignKey:SectionID"`
+    Page    ComicStoryboardPage     `json:"page,omitempty" gorm:"foreignKey:PageID"`
+    Details []ComicStoryboardDetail `json:"details,omitempty" gorm:"foreignKey:StoryboardID"`
+}
+
+func (ComicStoryboard) TableName() string {
+    return "comic_storyboard"
+}
+```
+
+### 3. 保持不变：`comic_storyboard_detail`（文本片段表）
+
+```go
+// backend/internal/models/storyboard.go (扩展)
+type ComicStoryboardDetail struct {
+    ID           uint      `json:"id" gorm:"primaryKey"`
+    StoryboardID uint      `json:"storyboard_id" gorm:"not null;index"`
+    Index        int       `json:"index" gorm:"not null"`
+    
+    // 文本与语音配置
+    Text        string    `json:"text" gorm:"type:text;not null"`
+    VoiceName   string    `json:"voice_name" gorm:"size:100"`
+    VoiceType   string    `json:"voice_type" gorm:"size:100"`
+    SpeedRatio  float64   `json:"speed_ratio" gorm:"default:1.0"`
+    IsNarration bool      `json:"is_narration" gorm:"default:false"`
+    
+    // TTS 音频
+    TTSUrl      string    `json:"tts_url" gorm:"size:500"`
+    
+    // 角色关联（新增）
+    RoleID      *uint     `json:"role_id,omitempty" gorm:"default:null;index"` // 关联角色ID
+    
+    CreatedAt   time.Time `json:"created_at"`
+    UpdatedAt   time.Time `json:"updated_at"`
+
+    Storyboard ComicStoryboard `json:"storyboard,omitempty" gorm:"foreignKey:StoryboardID"`
+    Role       *ComicRole      `json:"role,omitempty" gorm:"foreignKey:RoleID"`
+}
+
+func (ComicStoryboardDetail) TableName() string {
+    return "comic_storyboard_detail"
+}
+```
+
+---
+
+## 数据库表关系图
+
+```
+comic_section (章节)
+    ↓ 1:N
+comic_storyboard_page (分页)
+    ↓ 1:N
+comic_storyboard (分格)
+    ↓ 1:N
+comic_storyboard_detail (文本片段)
+    ↓ N:1
+comic_role (角色)
+```
+
+---
+
+## 前端 API 返回数据结构设计
+
+### API: `GET /comic/{id}/section/{section_id}/content`
+
+**新的返回结构**（支持分页）：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "section": {
+      "id": 1,
+      "comic_id": 1,
+      "index": 1,
+      "title": "第一章",
+      "detail": "章节内容...",
+      "status": "completed",
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    },
+    "pages": [
+      {
+        "id": 1,
+        "section_id": 1,
+        "index": 1,
+        "image_prompt": "A school campus scene with cherry blossoms...",
+        "image_url": "https://cdn.example.com/page1.jpg",
+        "layout_hint": "2x2 grid",
+        "page_summary": "主角初次登场，校园春日场景",
+        "status": "completed",
+        "panels": [
+          {
+            "id": 1,
+            "page_id": 1,
+            "index": 1,
+            "visual_prompt": "Close-up of protagonist's face with a gentle smile...",
+            "panel_summary": "主角微笑特写",
+            "details": [
+              {
+                "id": 1,
+                "storyboard_id": 1,
+                "index": 1,
+                "text": "早上好！",
+                "voice_name": "阳光少年",
+                "voice_type": "male_young",
+                "speed_ratio": 1.0,
+                "is_narration": false,
+                "tts_url": "https://cdn.example.com/tts1.mp3",
+                "role_id": 1,
+                "role": {
+                  "id": 1,
+                  "name": "小明",
+                  "gender": "male",
+                  "image_url": "https://cdn.example.com/role1.jpg"
+                }
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "page_id": 1,
+            "index": 2,
+            "visual_prompt": "Wide shot of school building...",
+            "panel_summary": "学校建筑全景",
+            "details": [
+              {
+                "id": 2,
+                "storyboard_id": 2,
+                "index": 1,
+                "text": "这是一个美好的早晨。",
+                "voice_name": "旁白",
+                "voice_type": "narrator",
+                "speed_ratio": 0.9,
+                "is_narration": true,
+                "tts_url": "https://cdn.example.com/tts2.mp3",
+                "role_id": null
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**关键变化**：
+1. ✅ 顶层增加 `pages` 数组，每个 page 包含 `panels` 数组
+2. ✅ 每个 page 有自己的 `image_url`（整页漫画图）
+3. ✅ 每个 panel 包含 `details` 数组（文本片段）
+4. ✅ 每个 detail 可关联 `role` 对象
+
+---
+
+## 适配器层重新设计
+
+### 新文件：`backend/internal/adapters/aigc_adapter.go`
+
+```go
+package adapters
+
+import (
+    "github.com/cohesion-dev/GNX/ai/gnxaigc"
+    "github.com/cohesion-dev/GNX/backend/internal/models"
+)
+
+type AIGCAdapter struct{}
+
+func NewAIGCAdapter() *AIGCAdapter {
+    return &AIGCAdapter{}
+}
+
+// AdaptedPage 适配后的页面数据
+type AdaptedPage struct {
+    Index        int
+    ImagePrompt  string
+    LayoutHint   string
+    PageSummary  string
+    Panels       []AdaptedPanel
+}
+
+// AdaptedPanel 适配后的分格数据
+type AdaptedPanel struct {
+    Index          int
+    VisualPrompt   string
+    PanelSummary   string
+    SourceSegments []gnxaigc.SourceTextSegment
+}
+
+// AdaptStoryboardPages 将 AI 返回的分页结构转换为适配后的结构
+func (a *AIGCAdapter) AdaptStoryboardPages(
+    pages []gnxaigc.StoryboardPage,
+) []AdaptedPage {
+    var result []AdaptedPage
+    
+    for pageIdx, page := range pages {
+        adaptedPage := AdaptedPage{
+            Index:       pageIdx + 1,
+            ImagePrompt: page.ImagePrompt,
+            LayoutHint:  page.LayoutHint,
+            PageSummary: page.PageSummary,
+            Panels:      make([]AdaptedPanel, 0, len(page.Panels)),
+        }
+        
+        for panelIdx, panel := range page.Panels {
+            adaptedPanel := AdaptedPanel{
+                Index:          panelIdx + 1,
+                VisualPrompt:   panel.VisualPrompt,
+                PanelSummary:   panel.PanelSummary,
+                SourceSegments: panel.SourceTextSegments,
+            }
+            adaptedPage.Panels = append(adaptedPage.Panels, adaptedPanel)
+        }
+        
+        result = append(result, adaptedPage)
+    }
+    
+    return result
+}
+
+// ResolveCharacterRoleID 根据 CharacterRefs 解析角色ID
+func (a *AIGCAdapter) ResolveCharacterRoleID(
+    segment gnxaigc.SourceTextSegment,
+    characterFeatures []gnxaigc.CharacterFeature,
+    roleMap map[string]uint,
+) *uint {
+    if len(segment.CharacterRefs) == 0 {
+        return nil
+    }
+    
+    firstRefIdx := segment.CharacterRefs[0]
+    if firstRefIdx >= len(characterFeatures) {
+        return nil
+    }
+    
+    characterName := characterFeatures[firstRefIdx].Basic.Name
+    if roleID, exists := roleMap[characterName]; exists {
+        return &roleID
+    }
+    
+    return nil
+}
+```
+
+---
+
+## Service 层改造
+
+### 修改：`backend/internal/services/comic_service.go`
+
+```go
+func (s *ComicService) processSection(comicID uint, section utils.Section) error {
+    // ... 前置代码（创建 comicSection）...
+    
+    ctx := context.Background()
+    
+    // 获取可用语音和角色信息
+    availableVoices, _ := s.aigcService.GetVoiceList(ctx)
+    var ttsVoices []gnxaigc.TTSVoiceItem
+    for _, v := range availableVoices {
+        ttsVoices = append(ttsVoices, gnxaigc.TTSVoiceItem{
+            VoiceName: v.VoiceName,
+            VoiceType: v.VoiceType,
+        })
+    }
+    
+    // 构建输入
+    input := gnxaigc.SummaryChapterInput{
+        NovelTitle:           comic.Title,
+        ChapterTitle:         section.Title,
+        Content:              section.Content,
+        AvailableVoiceStyles: ttsVoices,
+        CharacterFeatures:    characterFeatures,
+    }
+    
+    // 调用 AI 接口
+    output, err := s.aigcService.SummaryChapter(ctx, input)
+    if err != nil {
+        s.sectionRepo.UpdateStatus(comicSection.ID, "failed")
+        return err
+    }
+
+    // 更新角色特征
+    roleMap := s.updateCharacterFeatures(comicID, output.CharacterFeatures)
+    
+    // ✅ 使用适配器转换分页结构
+    adapter := adapters.NewAIGCAdapter()
+    adaptedPages := adapter.AdaptStoryboardPages(output.StoryboardPages)
+    
+    // ✅ 逐页处理
+    for _, adaptedPage := range adaptedPages {
+        // 创建页面记录
+        page := &models.ComicStoryboardPage{
+            SectionID:   comicSection.ID,
+            Index:       adaptedPage.Index,
+            ImagePrompt: adaptedPage.ImagePrompt,
+            LayoutHint:  adaptedPage.LayoutHint,
+            PageSummary: adaptedPage.PageSummary,
+            Status:      "pending",
+        }
+        
+        if err := s.storyboardRepo.CreatePage(page); err != nil {
+            continue
+        }
+        
+        // ✅ 逐分格处理
+        for _, adaptedPanel := range adaptedPage.Panels {
+            panel := &models.ComicStoryboard{
+                SectionID:    comicSection.ID,
+                PageID:       page.ID,
+                Index:        adaptedPanel.Index,
+                VisualPrompt: adaptedPanel.VisualPrompt,
+                PanelSummary: adaptedPanel.PanelSummary,
+                Status:       "pending",
+            }
+            
+            if err := s.storyboardRepo.Create(panel); err != nil {
+                continue
+            }
+            
+            // ✅ 处理文本片段
+            for detailIdx, segment := range adaptedPanel.SourceSegments {
+                roleID := adapter.ResolveCharacterRoleID(
+                    segment,
+                    output.CharacterFeatures,
+                    roleMap,
+                )
+                
+                detail := &models.ComicStoryboardDetail{
+                    StoryboardID: panel.ID,
+                    Index:        detailIdx + 1,
+                    Text:         segment.Text,
+                    VoiceName:    segment.VoiceName,
+                    VoiceType:    segment.VoiceType,
+                    SpeedRatio:   segment.SpeedRatio,
+                    IsNarration:  segment.IsNarration,
+                    RoleID:       roleID,
+                }
+                
+                if err := s.storyboardRepo.CreateDetail(detail); err != nil {
+                    continue
+                }
+                
+                // 异步生成 TTS
+                go s.generateTTS(detail.ID, segment.Text, segment.VoiceType, segment.SpeedRatio)
+            }
+            
+            // 标记分格完成
+            s.storyboardRepo.UpdateStatus(panel.ID, "completed")
+        }
+        
+        // ✅ 异步生成整页漫画图
+        go s.generatePageImage(page.ID, adaptedPage)
+    }
+
+    s.sectionRepo.UpdateStatus(comicSection.ID, "completed")
+    return nil
+}
+
+// ✅ 新增：生成整页漫画图
+func (s *ComicService) generatePageImage(pageID uint, adaptedPage adapters.AdaptedPage) {
+    ctx := context.Background()
+    
+    // 使用 AI 提供的 ComposePageImagePrompt 函数构建完整提示词
+    page, err := s.storyboardRepo.GetPageByID(pageID)
+    if err != nil {
+        return
+    }
+    
+    // 组合提示词（整页生成，包含所有分格）
+    fullPrompt := gnxaigc.ComposePageImagePrompt("", gnxaigc.StoryboardPage{
+        ImagePrompt: adaptedPage.ImagePrompt,
+        LayoutHint:  adaptedPage.LayoutHint,
+        Panels:      convertAdaptedPanelsToAIFormat(adaptedPage.Panels),
+    })
+    
+    imageData, err := s.aigcService.GenerateImageByText(ctx, fullPrompt)
+    if err != nil {
+        s.storyboardRepo.UpdatePageStatus(pageID, "failed")
+        return
+    }
+    
+    imageKey := fmt.Sprintf("pages/%d_%d.png", pageID, time.Now().Unix())
+    imageURL, err := s.storageService.UploadImage(imageKey, imageData)
+    if err != nil {
+        s.storyboardRepo.UpdatePageStatus(pageID, "failed")
+        return
+    }
+    
+    s.storyboardRepo.UpdatePageImageURL(pageID, imageURL)
+    s.storyboardRepo.UpdatePageStatus(pageID, "completed")
+}
+
+// 辅助函数：转换适配后的 Panels 为 AI 格式
+func convertAdaptedPanelsToAIFormat(panels []adapters.AdaptedPanel) []gnxaigc.StoryboardPanel {
+    result := make([]gnxaigc.StoryboardPanel, len(panels))
+    for i, p := range panels {
+        result[i] = gnxaigc.StoryboardPanel{
+            VisualPrompt: p.VisualPrompt,
+            PanelSummary: p.PanelSummary,
+        }
+    }
+    return result
+}
+```
+
+---
+
+## Repository 层扩展
+
+### 新增方法：`backend/internal/repositories/storyboard_repository.go`
+
+```go
+// CreatePage 创建分页记录
+func (r *StoryboardRepository) CreatePage(page *models.ComicStoryboardPage) error {
+    return r.db.Create(page).Error
+}
+
+// GetPageByID 获取分页详情
+func (r *StoryboardRepository) GetPageByID(pageID uint) (*models.ComicStoryboardPage, error) {
+    var page models.ComicStoryboardPage
+    err := r.db.First(&page, pageID).Error
+    return &page, err
+}
+
+// GetPagesBySectionID 获取章节的所有分页（含分格和文本详情）
+func (r *StoryboardRepository) GetPagesBySectionID(sectionID uint) ([]models.ComicStoryboardPage, error) {
+    var pages []models.ComicStoryboardPage
+    err := r.db.
+        Where("section_id = ?", sectionID).
+        Order("index ASC").
+        Preload("Panels", func(db *gorm.DB) *gorm.DB {
+            return db.Order("index ASC").
+                Preload("Details", func(db *gorm.DB) *gorm.DB {
+                    return db.Order("index ASC").Preload("Role")
+                })
+        }).
+        Find(&pages).Error
+    return pages, err
+}
+
+// UpdatePageImageURL 更新分页图片 URL
+func (r *StoryboardRepository) UpdatePageImageURL(pageID uint, imageURL string) error {
+    return r.db.Model(&models.ComicStoryboardPage{}).
+        Where("id = ?", pageID).
+        Update("image_url", imageURL).Error
+}
+
+// UpdatePageStatus 更新分页状态
+func (r *StoryboardRepository) UpdatePageStatus(pageID uint, status string) error {
+    return r.db.Model(&models.ComicStoryboardPage{}).
+        Where("id = ?", pageID).
+        Update("status", status).Error
+}
+```
+
+---
+
+## 修改 Handler 层
+
+### `backend/internal/handlers/section.go`
+
+```go
+// GetSectionContent 获取章节内容（包含分页结构）
+func (h *SectionHandler) GetSectionContent(c *gin.Context) {
+    comicID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+    sectionID, _ := strconv.ParseUint(c.Param("section_id"), 10, 32)
+    
+    section, err := h.sectionService.GetSectionByID(uint(sectionID))
+    if err != nil {
+        utils.ErrorResponse(c, 404, "Section not found")
+        return
+    }
+    
+    if section.ComicID != uint(comicID) {
+        utils.ErrorResponse(c, 400, "Section does not belong to comic")
+        return
+    }
+    
+    // ✅ 获取分页数据（包含 panels 和 details）
+    pages, err := h.sectionService.GetSectionPages(uint(sectionID))
+    if err != nil {
+        utils.ErrorResponse(c, 500, "Failed to get section pages")
+        return
+    }
+    
+    utils.SuccessResponse(c, gin.H{
+        "section": section,
+        "pages":   pages,
+    })
+}
+```
+
+---
+
+## 数据库迁移 SQL
+
+```sql
+-- 1. 创建分页表
+CREATE TABLE `comic_storyboard_page` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `section_id` INT UNSIGNED NOT NULL,
+  `index` INT NOT NULL COMMENT '页码',
+  `image_prompt` TEXT COMMENT '整页图像提示词',
+  `image_url` VARCHAR(500) COMMENT '整页漫画图URL',
+  `layout_hint` TEXT COMMENT '布局方式',
+  `page_summary` TEXT COMMENT '页面摘要',
+  `status` VARCHAR(20) DEFAULT 'pending',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_section_page` (`section_id`, `index`),
+  FOREIGN KEY (`section_id`) REFERENCES `comic_section`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='漫画章节分页表';
+
+-- 2. 修改分镜表：添加 page_id 字段
+ALTER TABLE `comic_storyboard`
+ADD COLUMN `page_id` INT UNSIGNED NOT NULL AFTER `section_id`,
+ADD COLUMN `visual_prompt` TEXT AFTER `image_url`,
+ADD COLUMN `panel_summary` TEXT AFTER `visual_prompt`,
+ADD INDEX `idx_page_panel` (`page_id`, `index`),
+ADD CONSTRAINT `fk_storyboard_page` FOREIGN KEY (`page_id`) REFERENCES `comic_storyboard_page`(`id`) ON DELETE CASCADE;
+
+-- 3. 修改分镜详情表：添加 role_id 字段
+ALTER TABLE `comic_storyboard_detail`
+ADD COLUMN `role_id` INT UNSIGNED DEFAULT NULL AFTER `is_narration`,
+ADD INDEX `idx_detail_role` (`role_id`),
+ADD CONSTRAINT `fk_detail_role` FOREIGN KEY (`role_id`) REFERENCES `comic_role`(`id`) ON DELETE SET NULL;
+
+-- 4. 清理索引（如果之前创建过）
+-- DROP INDEX idx_storyboard_page ON comic_storyboard; -- 旧设计的索引，新设计不需要
+```
+
+---
+
+## 方案优势
+
+✅ **数据结构清晰** - 分页与分格分离，符合 AI 接口语义  
+✅ **前端友好** - 返回结构层次分明，便于渲染漫画页  
+✅ **整页生图支持** - 可生成完整的多分格漫画页  
+✅ **向后兼容** - 保留旧字段，不影响现有逻辑  
+✅ **扩展性强** - 可独立优化页面和分格的生成策略
+
+---
+
+## 关键实现要点
+
+### 1. **图像生成策略**
+
+**当前方案**：每个 Page 生成一张完整的多分格漫画页
+- 使用 `ComposePageImagePrompt` 函数组合提示词
+- 生成的图像包含所有 panels 和边框分隔
+- 前端直接展示 page.image_url
+
+### 2. **数据加载性能**
+
+使用 GORM 的 Preload 级联加载：
+```go
+Section → Pages (Preload) → Panels (Preload) → Details (Preload) → Role (Preload)
+```
+
+单次查询获取完整章节数据，避免 N+1 问题。
+
+### 3. **前端渲染建议**
+
+```jsx
+// 伪代码示例
+{pages.map(page => (
+  <div className="comic-page" key={page.id}>
+    <img src={page.image_url} alt={`Page ${page.index}`} />
+    <div className="layout-info">{page.layout_hint}</div>
+    
+    {/* 可选：叠加分格详情（对话气泡等） */}
+    {page.panels.map(panel => (
+      <div key={panel.id}>
+        {panel.details.map(detail => (
+          <SpeechBubble 
+            key={detail.id} 
+            text={detail.text}
+            audio={detail.tts_url}
+            character={detail.role}
+          />
+        ))}
+      </div>
+    ))}
+  </div>
+))}
+```
+
+---
+
+## 后续实施步骤
+
+1. ✅ 创建 `comic_storyboard_page` 表迁移
+2. ✅ 修改 `comic_storyboard` 表结构
+3. ✅ 实现 Repository 新方法
+4. ✅ 实现 Adapter 转换逻辑
+5. ✅ 修改 Service 层处理流程
+6. ✅ 修改 Handler 层返回结构
+7. ✅ 编写单元测试
+8. ✅ 在测试环境验证完整流程
+
+---
+
+**请 Review 此重新设计方案，确认是否符合预期。**
+
+---
+
+**@YangSen-qn** (Oct 25, 08:27)
+@xgopilot 不用考虑兼容性问题，数据表 ComicStoryboard 为 ComicStoryboardPanel，ComicStoryboardDetail 调整为 SourceTextSegment，他们的字段需要对齐
+
+---
+
+**@xgopilot** (Oct 25, 08:27)
+### AI 新结构适配 - 最终设计方案（字段完全对齐版）
+
+## 设计变更说明
+
+根据最新要求，简化命名并完全对齐 AI 接口字段：
+- ✅ `ComicStoryboard` → `ComicStoryboardPanel` （对齐 `StoryboardPanel`）
+- ✅ `ComicStoryboardDetail` → `SourceTextSegment` （对齐 `SourceTextSegment`）
+- ✅ 所有字段名与 AI 接口完全对齐
+- ✅ 不考虑向后兼容性问题
+
+---
+
+## 数据库表结构设计
+
+### 1. 新增表：`comic_storyboard_page`
+
+**对应 AI 接口**：`StoryboardPage` (ai/gnxaigc/chapter.go:95-104)
+
+```go
+// backend/internal/models/storyboard_page.go (新文件)
+package models
+
+import "time"
+
+type ComicStoryboardPage struct {
+    ID        uint      `json:"id" gorm:"primaryKey"`
+    SectionID uint      `json:"section_id" gorm:"not null;index:idx_section_page"`
+    Index     int       `json:"index" gorm:"not null"` // 页码，从1开始
+    
+    // ===== AI 接口字段对齐 =====
+    // 对应 StoryboardPage.ImagePrompt
+    ImagePrompt string `json:"image_prompt" gorm:"type:text;not null"`
+    
+    // 对应 StoryboardPage.LayoutHint  
+    LayoutHint string `json:"layout_hint" gorm:"type:text;not null"`
+    
+    // 对应 StoryboardPage.PageSummary
+    PageSummary string `json:"page_summary,omitempty" gorm:"type:text"`
+    
+    // ===== 业务字段 =====
+    ImageURL  string    `json:"image_url" gorm:"size:500"`        // 生成的整页漫画图
+    Status    string    `json:"status" gorm:"size:20;default:'pending'"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+
+    // ===== 关联关系 =====
+    Section ComicSection           `json:"section,omitempty" gorm:"foreignKey:SectionID"`
+    Panels  []ComicStoryboardPanel `json:"panels,omitempty" gorm:"foreignKey:PageID"`
+}
+
+func (ComicStoryboardPage) TableName() string {
+    return "comic_storyboard_page"
+}
+```
+
+### 2. 新增表：`comic_storyboard_panel`（重命名自 `comic_storyboard`）
+
+**对应 AI 接口**：`StoryboardPanel` (ai/gnxaigc/chapter.go:86-93)
+
+```go
+// backend/internal/models/storyboard_panel.go (新文件，替代原 storyboard.go)
+package models
+
+import "time"
+
+type ComicStoryboardPanel struct {
+    ID        uint `json:"id" gorm:"primaryKey"`
+    SectionID uint `json:"section_id" gorm:"not null;index:idx_section_panel"`
+    PageID    uint `json:"page_id" gorm:"not null;index:idx_page_panel"`
+    Index     int  `json:"index" gorm:"not null"` // 分格在页面中的索引，从1开始
+    
+    // ===== AI 接口字段对齐 =====
+    // 对应 StoryboardPanel.VisualPrompt
+    VisualPrompt string `json:"visual_prompt" gorm:"type:text;not null"`
+    
+    // 对应 StoryboardPanel.PanelSummary
+    PanelSummary string `json:"panel_summary,omitempty" gorm:"type:text"`
+    
+    // ===== 业务字段 =====
+    Status    string    `json:"status" gorm:"size:20;default:'pending'"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+
+    // ===== 关联关系 =====
+    Section  ComicSection         `json:"section,omitempty" gorm:"foreignKey:SectionID"`
+    Page     ComicStoryboardPage  `json:"page,omitempty" gorm:"foreignKey:PageID"`
+    Segments []SourceTextSegment  `json:"source_text_segments,omitempty" gorm:"foreignKey:PanelID"`
+}
+
+func (ComicStoryboardPanel) TableName() string {
+    return "comic_storyboard_panel"
+}
+```
+
+### 3. 新增表：`source_text_segment`（重命名自 `comic_storyboard_detail`）
+
+**对应 AI 接口**：`SourceTextSegment` (ai/gnxaigc/chapter.go:69-84)
+
+```go
+// backend/internal/models/source_text_segment.go (新文件)
+package models
+
+import "time"
+
+type SourceTextSegment struct {
+    ID      uint `json:"id" gorm:"primaryKey"`
+    PanelID uint `json:"panel_id" gorm:"not null;index:idx_panel_segment"` // 关联 Panel
+    Index   int  `json:"index" gorm:"not null"` // 片段在 Panel 中的索引，从1开始
+    
+    // ===== AI 接口字段完全对齐 =====
+    // 对应 SourceTextSegment.Text
+    Text string `json:"text" gorm:"type:text;not null"`
+    
+    // 对应 SourceTextSegment.VoiceName
+    VoiceName string `json:"voice_name" gorm:"size:100;not null"`
+    
+    // 对应 SourceTextSegment.VoiceType
+    VoiceType string `json:"voice_type" gorm:"size:100;not null"`
+    
+    // 对应 SourceTextSegment.SpeedRatio
+    SpeedRatio float64 `json:"speed_ratio" gorm:"not null;default:1.0"`
+    
+    // 对应 SourceTextSegment.IsNarration
+    IsNarration bool `json:"is_narration,omitempty" gorm:"default:false"`
+    
+    // 对应 SourceTextSegment.CharacterRefs
+    CharacterRefs string `json:"character_refs,omitempty" gorm:"type:text"` // JSON 数组存储，如 "[0,1]"
+    
+    // 对应 SourceTextSegment.CharacterNames  
+    CharacterNames string `json:"character_names,omitempty" gorm:"type:text"` // JSON 数组存储，如 "[\"小明\",\"小红\"]"
+    
+    // ===== 业务字段 =====
+    TTSUrl    string    `json:"tts_url,omitempty" gorm:"size:500"` // TTS 音频 URL
+    RoleID    *uint     `json:"role_id,omitempty" gorm:"index"`    // 关联角色ID（从 CharacterRefs[0] 解析）
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+
+    // ===== 关联关系 =====
+    Panel ComicStoryboardPanel `json:"panel,omitempty" gorm:"foreignKey:PanelID"`
+    Role  *ComicRole           `json:"role,omitempty" gorm:"foreignKey:RoleID"`
+}
+
+func (SourceTextSegment) TableName() string {
+    return "source_text_segment"
+}
+```
+
+---
+
+## 数据库表关系图
+
+```
+comic_section (章节)
+    ↓ 1:N
+comic_storyboard_page (分页) ← StoryboardPage
+    ↓ 1:N
+comic_storyboard_panel (分格) ← StoryboardPanel  
+    ↓ 1:N
+source_text_segment (文本片段) ← SourceTextSegment
+    ↓ N:1
+comic_role (角色)
+```
+
+---
+
+## 数据库迁移 SQL
+
+```sql
+-- ===== 第一步：创建新表 =====
+
+-- 1. 创建分页表
+CREATE TABLE `comic_storyboard_page` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `section_id` INT UNSIGNED NOT NULL,
+  `index` INT NOT NULL COMMENT '页码',
+  `image_prompt` TEXT NOT NULL COMMENT '整页图像提示词',
+  `layout_hint` TEXT NOT NULL COMMENT '布局方式，如 2x2 grid',
+  `page_summary` TEXT COMMENT '页面摘要',
+  `image_url` VARCHAR(500) COMMENT '生成的整页漫画图URL',
+  `status` VARCHAR(20) DEFAULT 'pending',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_section_page` (`section_id`, `index`),
+  FOREIGN KEY (`section_id`) REFERENCES `comic_section`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='漫画章节分页表，对应StoryboardPage';
+
+-- 2. 创建分格表（重命名自 comic_storyboard）
+CREATE TABLE `comic_storyboard_panel` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `section_id` INT UNSIGNED NOT NULL,
+  `page_id` INT UNSIGNED NOT NULL,
+  `index` INT NOT NULL COMMENT '分格在页面中的索引',
+  `visual_prompt` TEXT NOT NULL COMMENT '分格视觉描述',
+  `panel_summary` TEXT COMMENT '分格情节摘要',
+  `status` VARCHAR(20) DEFAULT 'pending',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_section_panel` (`section_id`),
+  INDEX `idx_page_panel` (`page_id`, `index`),
+  FOREIGN KEY (`section_id`) REFERENCES `comic_section`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`page_id`) REFERENCES `comic_storyboard_page`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='漫画分格表，对应StoryboardPanel';
+
+-- 3. 创建文本片段表（重命名自 comic_storyboard_detail）
+CREATE TABLE `source_text_segment` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `panel_id` INT UNSIGNED NOT NULL,
+  `index` INT NOT NULL COMMENT '片段在Panel中的索引',
+  `text` TEXT NOT NULL COMMENT '语音文本片段',
+  `voice_name` VARCHAR(100) NOT NULL COMMENT '语音风格描述',
+  `voice_type` VARCHAR(100) NOT NULL COMMENT '音色类型',
+  `speed_ratio` DOUBLE NOT NULL DEFAULT 1.0 COMMENT '语速比例',
+  `is_narration` BOOLEAN DEFAULT FALSE COMMENT '是否为旁白',
+  `character_refs` TEXT COMMENT '角色索引JSON数组',
+  `character_names` TEXT COMMENT '角色姓名JSON数组',
+  `tts_url` VARCHAR(500) COMMENT 'TTS音频URL',
+  `role_id` INT UNSIGNED COMMENT '关联角色ID',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_panel_segment` (`panel_id`, `index`),
+  INDEX `idx_segment_role` (`role_id`),
+  FOREIGN KEY (`panel_id`) REFERENCES `comic_storyboard_panel`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`role_id`) REFERENCES `comic_role`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文本片段表，对应SourceTextSegment';
+
+-- ===== 第二步：数据迁移（如果需要）=====
+-- 如果有旧数据需要迁移，在这里添加迁移脚本
+
+-- ===== 第三步：删除旧表 =====
+-- DROP TABLE IF EXISTS `comic_storyboard_detail`;
+-- DROP TABLE IF EXISTS `comic_storyboard`;
+```
+
+---
+
+## 前端 API 返回数据结构
+
+### API: `GET /comic/{id}/section/{section_id}/content`
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "section": {
+      "id": 1,
+      "comic_id": 1,
+      "index": 1,
+      "title": "第一章",
+      "status": "completed"
+    },
+    "pages": [
+      {
+        "id": 1,
+        "section_id": 1,
+        "index": 1,
+        "image_prompt": "A school campus scene with cherry blossoms...",
+        "layout_hint": "2x2 grid",
+        "page_summary": "主角初次登场，校园春日场景",
+        "image_url": "https://cdn.example.com/page1.jpg",
+        "status": "completed",
+        "panels": [
+          {
+            "id": 1,
+            "page_id": 1,
+            "index": 1,
+            "visual_prompt": "Close-up of protagonist smiling gently...",
+            "panel_summary": "主角微笑特写",
+            "status": "completed",
+            "source_text_segments": [
+              {
+                "id": 1,
+                "panel_id": 1,
+                "index": 1,
+                "text": "早上好！",
+                "voice_name": "阳光少年",
+                "voice_type": "male_young",
+                "speed_ratio": 1.0,
+                "is_narration": false,
+                "character_refs": "[0]",
+                "character_names": "[\"小明\"]",
+                "tts_url": "https://cdn.example.com/tts1.mp3",
+                "role_id": 1,
+                "role": {
+                  "id": 1,
+                  "name": "小明",
+                  "gender": "male"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Repository 层设计
+
+```go
+// backend/internal/repositories/storyboard_repository.go
+package repositories
+
+import "gorm.io/gorm"
+
+type StoryboardRepository struct {
+    db *gorm.DB
+}
+
+func NewStoryboardRepository(db *gorm.DB) *StoryboardRepository {
+    return &StoryboardRepository{db: db}
+}
+
+// ===== Page 相关方法 =====
+func (r *StoryboardRepository) CreatePage(page *models.ComicStoryboardPage) error {
+    return r.db.Create(page).Error
+}
+
+func (r *StoryboardRepository) GetPageByID(id uint) (*models.ComicStoryboardPage, error) {
+    var page models.ComicStoryboardPage
+    err := r.db.First(&page, id).Error
+    return &page, err
+}
+
+func (r *StoryboardRepository) GetPagesBySectionID(sectionID uint) ([]models.ComicStoryboardPage, error) {
+    var pages []models.ComicStoryboardPage
+    err := r.db.
+        Where("section_id = ?", sectionID).
+        Order("index ASC").
+        Preload("Panels", func(db *gorm.DB) *gorm.DB {
+            return db.Order("index ASC").
+                Preload("Segments", func(db *gorm.DB) *gorm.DB {
+                    return db.Order("index ASC").Preload("Role")
+                })
+        }).
+        Find(&pages).Error
+    return pages, err
+}
+
+func (r *StoryboardRepository) UpdatePageImageURL(pageID uint, imageURL string) error {
+    return r.db.Model(&models.ComicStoryboardPage{}).
+        Where("id = ?", pageID).
+        Update("image_url", imageURL).Error
+}
+
+func (r *StoryboardRepository) UpdatePageStatus(pageID uint, status string) error {
+    return r.db.Model(&models.ComicStoryboardPage{}).
+        Where("id = ?", pageID).
+        Update("status", status).Error
+}
+
+// ===== Panel 相关方法 =====
+func (r *StoryboardRepository) CreatePanel(panel *models.ComicStoryboardPanel) error {
+    return r.db.Create(panel).Error
+}
+
+func (r *StoryboardRepository) UpdatePanelStatus(panelID uint, status string) error {
+    return r.db.Model(&models.ComicStoryboardPanel{}).
+        Where("id = ?", panelID).
+        Update("status", status).Error
+}
+
+// ===== Segment 相关方法 =====
+func (r *StoryboardRepository) CreateSegment(segment *models.SourceTextSegment) error {
+    return r.db.Create(segment).Error
+}
+
+func (r *StoryboardRepository) UpdateSegmentTTSURL(segmentID uint, ttsURL string) error {
+    return r.db.Model(&models.SourceTextSegment{}).
+        Where("id = ?", segmentID).
+        Update("tts_url", ttsURL).Error
+}
+```
+
+---
+
+## Service 层改造
+
+```go
+// backend/internal/services/comic_service.go
+func (s *ComicService) processSection(comicID uint, section utils.Section) error {
+    // ... 前置代码（创建 comicSection）...
+    
+    ctx := context.Background()
+    
+    // 获取可用语音和角色信息
+    availableVoices, _ := s.aigcService.GetVoiceList(ctx)
+    var ttsVoices []gnxaigc.TTSVoiceItem
+    for _, v := range availableVoices {
+        ttsVoices = append(ttsVoices, gnxaigc.TTSVoiceItem{
+            VoiceName: v.VoiceName,
+            VoiceType: v.VoiceType,
+        })
+    }
+    
+    // 构建已有角色特征
+    var characterFeatures []gnxaigc.CharacterFeature
+    // ... 从数据库加载已有角色 ...
+    
+    // 调用 AI 接口
+    output, err := s.aigcService.SummaryChapter(ctx, gnxaigc.SummaryChapterInput{
+        NovelTitle:           comic.Title,
+        ChapterTitle:         section.Title,
+        Content:              section.Content,
+        AvailableVoiceStyles: ttsVoices,
+        CharacterFeatures:    characterFeatures,
+    })
+    if err != nil {
+        s.sectionRepo.UpdateStatus(comicSection.ID, "failed")
+        return err
+    }
+
+    // 更新角色特征
+    roleMap := s.updateCharacterFeatures(comicID, output.CharacterFeatures)
+    
+    // ✅ 处理分页数据 - 直接使用 AI 接口返回的结构
+    for pageIdx, aiPage := range output.StoryboardPages {
+        // 创建 Page 记录
+        page := &models.ComicStoryboardPage{
+            SectionID:   comicSection.ID,
+            Index:       pageIdx + 1,
+            ImagePrompt: aiPage.ImagePrompt,
+            LayoutHint:  aiPage.LayoutHint,
+            PageSummary: aiPage.PageSummary,
+            Status:      "pending",
+        }
+        
+        if err := s.storyboardRepo.CreatePage(page); err != nil {
+            continue
+        }
+        
+        // 处理分格
+        for panelIdx, aiPanel := range aiPage.Panels {
+            panel := &models.ComicStoryboardPanel{
+                SectionID:    comicSection.ID,
+                PageID:       page.ID,
+                Index:        panelIdx + 1,
+                VisualPrompt: aiPanel.VisualPrompt,
+                PanelSummary: aiPanel.PanelSummary,
+                Status:       "pending",
+            }
+            
+            if err := s.storyboardRepo.CreatePanel(panel); err != nil {
+                continue
+            }
+            
+            // 处理文本片段
+            for segIdx, aiSegment := range aiPanel.SourceTextSegments {
+                // 解析角色ID
+                var roleID *uint
+                if len(aiSegment.CharacterRefs) > 0 {
+                    firstRefIdx := aiSegment.CharacterRefs[0]
+                    if firstRefIdx < len(output.CharacterFeatures) {
+                        characterName := output.CharacterFeatures[firstRefIdx].Basic.Name
+                        if id, exists := roleMap[characterName]; exists {
+                            roleID = &id
+                        }
+                    }
+                }
+                
+                // 序列化 CharacterRefs 和 CharacterNames
+                characterRefsJSON, _ := json.Marshal(aiSegment.CharacterRefs)
+                characterNamesJSON, _ := json.Marshal(aiSegment.CharacterNames)
+                
+                segment := &models.SourceTextSegment{
+                    PanelID:        panel.ID,
+                    Index:          segIdx + 1,
+                    Text:           aiSegment.Text,
+                    VoiceName:      aiSegment.VoiceName,
+                    VoiceType:      aiSegment.VoiceType,
+                    SpeedRatio:     aiSegment.SpeedRatio,
+                    IsNarration:    aiSegment.IsNarration,
+                    CharacterRefs:  string(characterRefsJSON),
+                    CharacterNames: string(characterNamesJSON),
+                    RoleID:         roleID,
+                }
+                
+                if err := s.storyboardRepo.CreateSegment(segment); err != nil {
+                    continue
+                }
+                
+                // 异步生成 TTS
+                go s.generateTTS(segment.ID, segment.Text, segment.VoiceType, segment.SpeedRatio)
+            }
+            
+            // 标记 Panel 完成
+            s.storyboardRepo.UpdatePanelStatus(panel.ID, "completed")
+        }
+        
+        // 异步生成整页漫画图
+        go s.generatePageImage(page.ID, aiPage)
+    }
+
+    s.sectionRepo.UpdateStatus(comicSection.ID, "completed")
+    return nil
+}
+
+// 生成整页漫画图
+func (s *ComicService) generatePageImage(pageID uint, aiPage gnxaigc.StoryboardPage) {
+    ctx := context.Background()
+    
+    // 使用 AI 的 ComposePageImagePrompt 函数
+    fullPrompt := gnxaigc.ComposePageImagePrompt("", aiPage)
+    
+    imageData, err := s.aigcService.GenerateImageByText(ctx, fullPrompt)
+    if err != nil {
+        s.storyboardRepo.UpdatePageStatus(pageID, "failed")
+        return
+    }
+    
+    imageKey := fmt.Sprintf("pages/%d_%d.png", pageID, time.Now().Unix())
+    imageURL, err := s.storageService.UploadImage(imageKey, imageData)
+    if err != nil {
+        s.storyboardRepo.UpdatePageStatus(pageID, "failed")
+        return
+    }
+    
+    s.storyboardRepo.UpdatePageImageURL(pageID, imageURL)
+    s.storyboardRepo.UpdatePageStatus(pageID, "completed")
+}
+
+// 生成 TTS
+func (s *ComicService) generateTTS(segmentID uint, text, voiceType string, speedRatio float64) {
+    ctx := context.Background()
+    
+    audioData, err := s.aigcService.TextToSpeechSimple(ctx, text, voiceType, speedRatio)
+    if err != nil {
+        return
+    }
+    
+    audioKey := fmt.Sprintf("tts/%d_%d.mp3", segmentID, time.Now().Unix())
+    audioURL, err := s.storageService.UploadAudio(audioKey, audioData)
+    if err != nil {
+        return
+    }
+    
+    s.storyboardRepo.UpdateSegmentTTSURL(segmentID, audioURL)
+}
+```
+
+---
+
+## 字段对齐总结
+
+| 数据库表 | 数据库字段 | AI 接口 | AI 字段 | 对齐状态 |
+|---------|-----------|---------|---------|----------|
+| `comic_storyboard_page` | `image_prompt` | `StoryboardPage` | `ImagePrompt` | ✅ 完全对齐 |
+| `comic_storyboard_page` | `layout_hint` | `StoryboardPage` | `LayoutHint` | ✅ 完全对齐 |
+| `comic_storyboard_page` | `page_summary` | `StoryboardPage` | `PageSummary` | ✅ 完全对齐 |
+| `comic_storyboard_panel` | `visual_prompt` | `StoryboardPanel` | `VisualPrompt` | ✅ 完全对齐 |
+| `comic_storyboard_panel` | `panel_summary` | `StoryboardPanel` | `PanelSummary` | ✅ 完全对齐 |
+| `source_text_segment` | `text` | `SourceTextSegment` | `Text` | ✅ 完全对齐 |
+| `source_text_segment` | `voice_name` | `SourceTextSegment` | `VoiceName` | ✅ 完全对齐 |
+| `source_text_segment` | `voice_type` | `SourceTextSegment` | `VoiceType` | ✅ 完全对齐 |
+| `source_text_segment` | `speed_ratio` | `SourceTextSegment` | `SpeedRatio` | ✅ 完全对齐 |
+| `source_text_segment` | `is_narration` | `SourceTextSegment` | `IsNarration` | ✅ 完全对齐 |
+| `source_text_segment` | `character_refs` | `SourceTextSegment` | `CharacterRefs` | ✅ 完全对齐 |
+| `source_text_segment` | `character_names` | `SourceTextSegment` | `CharacterNames` | ✅ 完全对齐 |
+
+---
+
+## 方案优势
+
+✅ **命名直观** - 表名直接对应 AI 接口结构，易于理解  
+✅ **字段完全对齐** - 所有字段名与 AI 接口一致，无需记忆映射关系  
+✅ **代码简洁** - 无需复杂的适配器，直接使用 AI 返回数据  
+✅ **可维护性强** - AI 接口更新时，数据库字段含义清晰可追溯
+
+---
+
+**请 Review 此最终设计方案，确认字段对齐是否符合要求。**
+
+---
+
+**@YangSen-qn** (Oct 25, 09:02)
+@xgopilot source_text_segment 表名调整为 comic_storyboard_segment，另外里面包含角色名并关联角色，不用包含角色相关数据
+
+---
+
+**@xgopilot** (Oct 25, 09:28)
+### ✅ Table name and schema adjustment completed
+
+**Changes Summary**:
+
+#### 1. **New Data Models** (backend/internal/models/storyboard.go)
+- ✅ Created `ComicStoryboardPage` - aligns with AI interface `StoryboardPage`
+  - Fields: `image_prompt`, `layout_hint`, `page_summary`, `image_url`, `status`
+  - Table name: `comic_storyboard_page`
+  
+- ✅ Created `ComicStoryboardPanel` - aligns with AI interface `StoryboardPanel`
+  - Fields: `visual_prompt`, `panel_summary`, `status`
+  - Table name: `comic_storyboard_panel`
+  
+- ✅ Created `ComicStoryboardSegment` - **renamed from `source_text_segment`**
+  - Table name: **`comic_storyboard_segment`** ✓
+  - Fields: `text`, `voice_name`, `voice_type`, `speed_ratio`, `is_narration`
+  - **New field**: `character_names` - stores character names as JSON array
+  - **New field**: `role_id` - associates with comic_role table (without embedding full data) ✓
+  - Relationship: belongs to `ComicStoryboardPanel`, optionally references `ComicRole`
+
+#### 2. **Repository Layer Updates** (backend/internal/repositories/storyboard_repository.go)
+- ✅ Added `CreatePage()`, `GetPageByID()`, `GetPagesBySectionID()`
+- ✅ Added `UpdatePageImageURL()`, `UpdatePageStatus()`
+- ✅ Added `CreatePanel()`, `UpdatePanelStatus()`
+- ✅ Added `CreateSegment()`, `UpdateSegmentTTSURL()`
+- ✅ Updated `GetPagesBySectionID()` with proper preloading: Pages → Panels → Segments → Role
+
+#### 3. **Service Layer Updates** (backend/internal/services/comic_service.go)
+- ✅ Fixed line 227 issue: Changed from `output.StoryboardItems` to `output.StoryboardPages`
+- ✅ Added JSON import for character_names serialization
+- ✅ Updated `processSection()` to handle 3-level structure:
+  - Iterates through `StoryboardPages` → `Panels` → `SourceTextSegments`
+  - Creates Page, Panel, and Segment records
+  - Extracts character name from `CharacterNames[0]` and associates with role_id
+  - Serializes `CharacterNames` array to JSON for storage
+- ✅ Updated `updateCharacterFeatures()` to return `map[string]uint` (name → role_id mapping)
+- ✅ Added `generatePageImage()` - generates images using `ComposePageImagePrompt()`
+- ✅ Added `generateSegmentTTS()` - generates TTS audio for segments
+
+#### 4. **Data Structure Alignment**
+```
+AI Interface              Database Model
+─────────────────        ─────────────────────
+StoryboardPage    →      ComicStoryboardPage
+StoryboardPanel   →      ComicStoryboardPanel
+SourceTextSegment →      ComicStoryboardSegment (table: comic_storyboard_segment)
+```
+
+**Key Features**:
+- ✅ Table renamed to `comic_storyboard_segment` as requested
+- ✅ Contains character names via `character_names` JSON field
+- ✅ Associated with roles via `role_id` foreign key
+- ✅ Does NOT embed full character data (only ID reference)
+
+**Commit**: https://github.com/cohesion-dev/GNX/commit/28cc1ac
+**Branch**: `xgopilot/claude/issue-29-1761384521`
+
+**Note**: Database migration will be needed to create the new tables:
+- `comic_storyboard_page`
+- `comic_storyboard_panel`  
+- `comic_storyboard_segment`
+
+---
+
+**@YangSen-qn** (Oct 25, 09:37)
+@xgopilot 当前代码仓库有更新，你需要同步下，然后基于此给出详细设计
+
+
+---
+
+**@xgopilot** (Oct 25, 09:37)
+### AI 新结构适配 - 详细设计文档
+
+## 一、当前实现状态分析
+
+### 1.1 已完成的核心改造
+
+根据最新代码分析，系统已完成以下关键适配：
+
+#### **数据模型层** (backend/internal/models/storyboard.go)
+
+✅ **三层数据结构已建立**：
+```go
+ComicStoryboardPage (漫画分页)
+    ↓ 1:N
+ComicStoryboardPanel (漫画分格) 
+    ↓ 1:N
+ComicStoryboardSegment (文本片段)
+```
+
+✅ **字段对齐情况**：
+
+| 数据库模型 | 表名 | AI接口 | 对齐状态 |
+|-----------|------|--------|----------|
+| `ComicStoryboardPage` | `comic_storyboard_page` | `StoryboardPage` | ✅ 完全对齐 |
+| `ComicStoryboardPanel` | `comic_storyboard_panel` | `StoryboardPanel` | ✅ 完全对齐 |
+| `ComicStoryboardSegment` | **`comic_storyboard_segment`** | `SourceTextSegment` | ✅ 完全对齐 |
+
+✅ **ComicStoryboardSegment 核心字段**：
+- `character_names` (TEXT) - 存储角色名称数组（JSON格式）
+- `role_id` (FK) - 关联 comic_role 表，仅存储ID引用
+- 不包含角色完整数据 ✓
+
+#### **服务层** (backend/internal/services/comic_service.go)
+
+✅ **processSection() 方法**已完全重构：
+- ✅ 正确处理 `output.StoryboardPages` (line 228)
+- ✅ 三层嵌套循环：Pages → Panels → SourceTextSegments
+- ✅ 从 `CharacterNames[0]` 提取角色名并关联 role_id (line 258-262)
+- ✅ 序列化 `CharacterNames` 为JSON存储 (line 265)
+
+✅ **updateCharacterFeatures()** 已返回 `map[string]uint` (line 296)
+
+✅ **新增方法**：
+- `generatePageImage()` - 使用 `ComposePageImagePrompt()` 生成整页图像
+- `generateSegmentTTS()` - 为segment生成TTS音频
+
+---
+
+## 二、数据结构详细设计
+
+### 2.1 完整数据库表结构
+
+#### **表1: `comic_storyboard_page`**（分页表）
+
+```sql
+CREATE TABLE `comic_storyboard_page` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `section_id` INT UNSIGNED NOT NULL COMMENT '所属章节ID',
+  `index` INT NOT NULL COMMENT '页码（从1开始）',
+  
+  -- AI接口字段
+  `image_prompt` TEXT NOT NULL COMMENT '整页图像提示词（英文）',
+  `layout_hint` TEXT NOT NULL COMMENT '分格布局方式，如"2x2 grid"',
+  `page_summary` TEXT COMMENT '页面情节摘要（可选）',
+  
+  -- 业务字段
+  `image_url` VARCHAR(500) COMMENT '生成的整页漫画图URL',
+  `status` VARCHAR(20) DEFAULT 'pending' COMMENT '状态：pending/completed/failed',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  
+  INDEX `idx_section_page` (`section_id`, `index`),
+  FOREIGN KEY (`section_id`) REFERENCES `comic_section`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='漫画章节分页表';
+```
+
+#### **表2: `comic_storyboard_panel`**（分格表）
+
+```sql
+CREATE TABLE `comic_storyboard_panel` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `section_id` INT UNSIGNED NOT NULL COMMENT '所属章节ID',
+  `page_id` INT UNSIGNED NOT NULL COMMENT '所属页面ID',
+  `index` INT NOT NULL COMMENT '分格在页面中的索引（从1开始）',
+  
+  -- AI接口字段
+  `visual_prompt` TEXT NOT NULL COMMENT '分格视觉描述（英文）',
+  `panel_summary` TEXT COMMENT '分格情节摘要（可选）',
+  
+  -- 业务字段
+  `status` VARCHAR(20) DEFAULT 'pending' COMMENT '状态：pending/completed/failed',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  
+  INDEX `idx_section_panel` (`section_id`),
+  INDEX `idx_page_panel` (`page_id`, `index`),
+  FOREIGN KEY (`section_id`) REFERENCES `comic_section`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`page_id`) REFERENCES `comic_storyboard_page`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='漫画分格表';
+```
+
+#### **表3: `comic_storyboard_segment`**（文本片段表）
+
+```sql
+CREATE TABLE `comic_storyboard_segment` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `panel_id` INT UNSIGNED NOT NULL COMMENT '所属分格ID',
+  `index` INT NOT NULL COMMENT '片段在分格中的索引（从1开始）',
+  
+  -- AI接口字段（完全对齐）
+  `text` TEXT NOT NULL COMMENT '语音文本片段',
+  `voice_name` VARCHAR(100) NOT NULL COMMENT '语音风格描述',
+  `voice_type` VARCHAR(100) NOT NULL COMMENT '音色类型',
+  `speed_ratio` DOUBLE NOT NULL DEFAULT 1.0 COMMENT '语速比例',
+  `is_narration` BOOLEAN DEFAULT FALSE COMMENT '是否为旁白',
+  `character_names` TEXT COMMENT '角色姓名JSON数组，如["小明","小红"]',
+  
+  -- 业务字段
+  `tts_url` VARCHAR(500) COMMENT 'TTS音频URL',
+  `role_id` INT UNSIGNED COMMENT '关联角色ID（从character_names[0]解析）',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  
+  INDEX `idx_panel_segment` (`panel_id`, `index`),
+  INDEX `idx_segment_role` (`role_id`),
+  FOREIGN KEY (`panel_id`) REFERENCES `comic_storyboard_panel`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`role_id`) REFERENCES `comic_role`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文本片段表';
+```
+
+### 2.2 数据关系图
+
+```
+┌─────────────────┐
+│ comic_section   │
+│ (章节)          │
+└────────┬────────┘
+         │ 1:N
+         ↓
+┌──────────────────────┐
+│ comic_storyboard_page│
+│ (分页)               │
+│ - image_prompt       │
+│ - layout_hint        │
+│ - page_summary       │
+│ - image_url          │
+└────────┬─────────────┘
+         │ 1:N
+         ↓
+┌────────────────────────┐
+│ comic_storyboard_panel │
+│ (分格)                 │
+│ - visual_prompt        │
+│ - panel_summary        │
+└────────┬───────────────┘
+         │ 1:N
+         ↓
+┌──────────────────────────┐
+│ comic_storyboard_segment │
+│ (文本片段)               │
+│ - text                   │
+│ - character_names (JSON) │───┐
+│ - role_id (FK)           │←──┼─┐
+└──────────────────────────┘   │ │
+                               │ │ N:1
+                               │ ↓
+                               │ ┌────────────┐
+                               └→│ comic_role │
+                                 │ (角色)     │
+                                 └────────────┘
+```
+
+---
+
+## 三、核心业务流程设计
+
+### 3.1 章节处理流程 (processSection)
+
+```go
+// 伪代码描述完整流程
+func processSection(comicID, section) {
+    // 1. 创建章节记录
+    comicSection = CreateSection(section)
+    
+    // 2. 准备AI输入
+    input = {
+        NovelTitle: comic.Title,
+        ChapterTitle: section.Title,
+        Content: section.Content,
+        AvailableVoiceStyles: getTTSVoices(),
+        CharacterFeatures: loadExistingRoles(comic.Roles)
+    }
+    
+    // 3. 调用AI接口
+    output = aigcService.SummaryChapter(input)
+    // output.StoryboardPages: []StoryboardPage
+    // output.CharacterFeatures: []CharacterFeature
+    
+    // 4. 更新/创建角色
+    roleMap = updateCharacterFeatures(comicID, output.CharacterFeatures)
+    // roleMap: map[string]uint  {"小明": 1, "小红": 2}
+    
+    // 5. 三层嵌套处理
+    FOR EACH page IN output.StoryboardPages:
+        // 5.1 创建Page记录
+        dbPage = CreatePage({
+            SectionID: comicSection.ID,
+            Index: pageIdx + 1,
+            ImagePrompt: page.ImagePrompt,
+            LayoutHint: page.LayoutHint,
+            PageSummary: page.PageSummary
+        })
+        
+        FOR EACH panel IN page.Panels:
+            // 5.2 创建Panel记录
+            dbPanel = CreatePanel({
+                SectionID: comicSection.ID,
+                PageID: dbPage.ID,
+                Index: panelIdx + 1,
+                VisualPrompt: panel.VisualPrompt,
+                PanelSummary: panel.PanelSummary
+            })
+            
+            FOR EACH segment IN panel.SourceTextSegments:
+                // 5.3 解析角色ID
+                roleID = NULL
+                IF segment.CharacterNames NOT EMPTY:
+                    characterName = segment.CharacterNames[0]
+                    roleID = roleMap[characterName]
+                
+                // 5.4 序列化角色名称
+                characterNamesJSON = JSON.Marshal(segment.CharacterNames)
+                
+                // 5.5 创建Segment记录
+                dbSegment = CreateSegment({
+                    PanelID: dbPanel.ID,
+                    Index: segIdx + 1,
+                    Text: segment.Text,
+                    VoiceName: segment.VoiceName,
+                    VoiceType: segment.VoiceType,
+                    SpeedRatio: segment.SpeedRatio,
+                    IsNarration: segment.IsNarration,
+                    CharacterNames: characterNamesJSON,
+                    RoleID: roleID
+                })
+                
+                // 5.6 异步生成TTS
+                GO generateSegmentTTS(dbSegment.ID, ...)
+            END FOR
+            
+            // 5.7 标记Panel完成
+            UpdatePanelStatus(dbPanel.ID, "completed")
+        END FOR
+        
+        // 5.8 异步生成整页图像
+        GO generatePageImage(dbPage.ID, page)
+    END FOR
+    
+    // 6. 标记章节完成
+    UpdateSectionStatus(comicSection.ID, "completed")
+}
+```
+
+### 3.2 整页图像生成流程
+
+```go
+func generatePageImage(pageID, aiPage) {
+    // 1. 使用AI提供的ComposePageImagePrompt函数
+    fullPrompt = ComposePageImagePrompt("", aiPage)
+    // fullPrompt包含：
+    //   - page.ImagePrompt（基础提示词）
+    //   - page.LayoutHint（布局信息）
+    //   - 所有panel的VisualPrompt（分格描述）
+    
+    // 2. 调用文生图服务
+    imageData = aigcService.GenerateImageByText(fullPrompt)
+    
+    // 3. 上传图片
+    imageKey = "pages/{pageID}_{timestamp}.png"
+    imageURL = storageService.UploadImage(imageKey, imageData)
+    
+    // 4. 更新数据库
+    UpdatePageImageURL(pageID, imageURL)
+    UpdatePageStatus(pageID, "completed")
+}
+```
+
+### 3.3 角色关联策略
+
+```go
+// 策略：从CharacterNames数组取第一个角色名
+func resolveRoleID(segment, roleMap) {
+    IF segment.CharacterNames.Length == 0:
+        RETURN NULL  // 旁白或无角色对话
+    
+    characterName = segment.CharacterNames[0]  // 取第一个
+    RETURN roleMap[characterName]  // 查找角色ID
+}
+
+// 示例数据流：
+AI返回: {
+    "character_names": ["小明", "小红"]  // 多角色对话
+}
+↓
+数据库存储: {
+    "character_names": "[\"小明\",\"小红\"]",  // JSON字符串
+    "role_id": 1  // 仅关联第一个角色（小明的ID）
+}
+```
+
+---
+
+## 四、前端API设计
+
+### 4.1 获取章节内容接口
+
+**请求**: `GET /api/comic/{comic_id}/section/{section_id}/content`
+
+**响应示例**:
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "section": {
+      "id": 1,
+      "comic_id": 1,
+      "index": 1,
+      "title": "第一章",
+      "status": "completed"
+    },
+    "pages": [
+      {
+        "id": 1,
+        "section_id": 1,
+        "index": 1,
+        "image_prompt": "A vibrant school campus scene...",
+        "layout_hint": "2x2 grid",
+        "page_summary": "主角初次登场，校园春日场景",
+        "image_url": "https://cdn.example.com/page_1_1234567890.png",
+        "status": "completed",
+        "panels": [
+          {
+            "id": 1,
+            "page_id": 1,
+            "section_id": 1,
+            "index": 1,
+            "visual_prompt": "Close-up shot of protagonist smiling gently...",
+            "panel_summary": "主角微笑特写",
+            "status": "completed",
+            "source_text_segments": [
+              {
+                "id": 1,
+                "panel_id": 1,
+                "index": 1,
+                "text": "早上好！今天天气真不错。",
+                "voice_name": "阳光少年",
+                "voice_type": "male_young",
+                "speed_ratio": 1.0,
+                "is_narration": false,
+                "character_names": "[\"小明\"]",
+                "tts_url": "https://cdn.example.com/tts_1_1234567890.mp3",
+                "role_id": 1,
+                "role": {
+                  "id": 1,
+                  "name": "小明",
+                  "gender": "male",
+                  "age": "16",
+                  "image_url": "https://cdn.example.com/role_1.jpg"
+                }
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "page_id": 1,
+            "section_id": 1,
+            "index": 2,
+            "visual_prompt": "Wide shot of school building with cherry blossoms...",
+            "panel_summary": "学校建筑全景",
+            "status": "completed",
+            "source_text_segments": [
+              {
+                "id": 2,
+                "panel_id": 2,
+                "index": 1,
+                "text": "春天的校园充满了生机。",
+                "voice_name": "旁白",
+                "voice_type": "narrator_female",
+                "speed_ratio": 0.9,
+                "is_narration": true,
+                "character_names": "[]",
+                "tts_url": "https://cdn.example.com/tts_2_1234567890.mp3",
+                "role_id": null,
+                "role": null
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 4.2 数据加载性能优化
+
+使用GORM的Preload实现一次性加载：
+
+```go
+func GetPagesBySectionID(sectionID) {
+    db.Where("section_id = ?", sectionID).
+       Order("index ASC").
+       Preload("Panels", func(db *gorm.DB) *gorm.DB {
+           return db.Order("index ASC").
+               Preload("Segments", func(db *gorm.DB) *gorm.DB {
+                   return db.Order("index ASC").Preload("Role")
+               })
+       }).
+       Find(&pages)
+}
+```
+
+**SQL查询次数**: 4次
+- 1次查询pages
+- 1次查询所有panels (IN条件)
+- 1次查询所有segments (IN条件)
+- 1次查询所有关联roles (IN条件)
+
+**避免N+1问题** ✓
+
+---
+
+## 五、待实施工作
+
+### 5.1 数据库迁移
+
+**优先级：高**
+
+创建迁移文件执行：
+
+```sql
+-- Step 1: 创建新表
+CREATE TABLE `comic_storyboard_page` (...);
+CREATE TABLE `comic_storyboard_panel` (...);
+CREATE TABLE `comic_storyboard_segment` (...);
+
+-- Step 2: 数据迁移（如果有旧数据）
+-- 从 comic_storyboard 和 comic_storyboard_detail 迁移数据
+
+-- Step 3: 删除旧表（可选，建议保留一段时间）
+-- DROP TABLE IF EXISTS `comic_storyboard_detail`;
+-- DROP TABLE IF EXISTS `comic_storyboard`;
+```
+
+### 5.2 Handler层更新
+
+**优先级：中**
+
+需要新增或修改API handler:
+
+```go
+// backend/internal/handlers/section.go
+func (h *SectionHandler) GetSectionContent(c *gin.Context) {
+    sectionID := c.Param("section_id")
+    
+    pages, err := h.storyboardRepo.GetPagesBySectionID(sectionID)
+    if err != nil {
+        utils.ErrorResponse(c, 500, "Failed to get pages")
+        return
+    }
+    
+    section, _ := h.sectionRepo.GetByID(sectionID)
+    
+    utils.SuccessResponse(c, gin.H{
+        "section": section,
+        "pages": pages,
+    })
+}
+```
+
+### 5.3 旧表兼容性处理
+
+**优先级：低**
+
+`ComicStoryboard` 和 `ComicStoryboardDetail` 模型已保留在代码中，用于：
+- 向后兼容旧数据读取
+- 过渡期间双写（可选）
+
+建议策略：
+1. 新数据使用新表结构
+2. 旧数据保留，仅读取
+3. 3个月后删除旧表和旧模型
+
+---
+
+## 六、关键设计决策
+
+### 6.1 为什么角色关联只取CharacterNames[0]？
+
+**原因**：
+1. 大多数对话场景只有一个说话者
+2. 数据库外键设计（一个segment对应一个role）
+3. 避免多对多关联表的复杂性
+
+**未来扩展**：
+如果需要支持多角色（如"小明和小红一起说"），可以：
+- 添加中间表 `segment_role_mapping`
+- 或在前端解析 `character_names` JSON展示多角色
+
+### 6.2 为什么使用JSON存储CharacterNames？
+
+**优势**：
+- 保留完整信息（可能有多个角色）
+- 灵活性强，不改表结构即可支持未来扩展
+- 方便前端直接解析展示
+
+**注意事项**：
+- JSON字段不能直接索引
+- 查询需要解析JSON（可用role_id索引）
+
+### 6.3 图像生成策略
+
+**当前方案**：每个Page生成一张完整多分格漫画页
+
+**实现**：
+- 使用 `gnxaigc.ComposePageImagePrompt()` 整合所有panel描述
+- 生成包含所有分格和边框的完整图像
+- 前端直接展示 `page.image_url`
+
+**优势**：
+- 符合真实漫画呈现方式
+- 视觉连贯性强
+- 减少图片生成次数
+
+---
+
+## 七、测试建议
+
+### 7.1 单元测试
+
+```go
+// 测试角色ID解析
+func TestResolveRoleID(t *testing.T) {
+    roleMap := map[string]uint{"小明": 1, "小红": 2}
+    
+    segment1 := SourceTextSegment{CharacterNames: []string{"小明"}}
+    assert.Equal(t, uint(1), resolveRoleID(segment1, roleMap))
+    
+    segment2 := SourceTextSegment{CharacterNames: []string{}}
+    assert.Nil(t, resolveRoleID(segment2, roleMap))
+}
+
+// 测试JSON序列化
+func TestCharacterNamesJSON(t *testing.T) {
+    names := []string{"小明", "小红"}
+    json, _ := json.Marshal(names)
+    assert.Equal(t, "[\"小明\",\"小红\"]", string(json))
+}
+```
+
+### 7.2 集成测试
+
+1. 创建测试章节
+2. 调用 `SummaryChapter` 模拟AI响应
+3. 验证数据库记录：
+   - Pages创建正确
+   - Panels关联正确
+   - Segments的role_id正确
+   - character_names JSON格式正确
+
+---
+
+## 八、总结
+
+### ✅ 已完成
+1. 三层数据模型（Page/Panel/Segment）已创建
+2. 表名 `comic_storyboard_segment` 已正确设置
+3. `character_names` 字段已添加（JSON格式）
+4. `role_id` 关联已实现（仅存ID引用）
+5. Service层完全重构，正确处理AI接口返回
+
+### 🔄 待完成
+1. 数据库迁移SQL执行
+2. Handler层API更新
+3. 单元测试和集成测试
+
+### 📋 核心特性
+- ✅ 完全对齐AI接口字段
+- ✅ 支持分页分格结构
+- ✅ 角色关联轻量化（无冗余数据）
+- ✅ 性能优化（Preload避免N+1）
+- ✅ 向后兼容（旧模型保留）
+
+---
+
+**@YangSen-qn** (Oct 25, 09:56)
+@xgopilot 你需要再做如下调整：
+
+1. comic_storyboard_segment 表中的 voice_type、speed_ratio、is_narration、character_names、voice_name 可以去掉，因为已经关联了 role，所以他有相关的 TTS 数据。
+2. processSection 函数中不用异步生成 TTS 音频，因为 TTS 音频是客户端在读取时请求，不读取不生成，生成后会缓存，这部分逻辑当前已经完善。
+3. comic_storyboard_panel 表需要增加一个 image_url 字段，因为一个 panel 需要对应一张图片，comic_storyboard_page 中的 image_url 需要去掉，图片应该在 panel 中。生成 panel 时也需要生成图片，所有 panel 生成完毕，page 生成完成
+
+---
+
+**@xgopilot** (Oct 25, 09:56)
+### 正在进行结构调整 <img src="/workspace/.tmp-images/image_1761387779659571926.png" width="14px" height="14px" style="vertical-align: middle; margin-left: 4px;" />
+
+**调整任务**:
+1. comic_storyboard_segment 表去除字段: voice_type、speed_ratio、is_narration、character_names、voice_name
+2. processSection 函数去除异步生成 TTS 音频
+3. comic_storyboard_panel 表增加 image_url 字段
+4. comic_storyboard_page 表去除 image_url 字段
+5. 调整图片生成逻辑：panel生成时生成图片，所有panel完成后page完成
+
+**任务列表**:
+- [x] 修改 ComicStoryboardSegment 模型
+- [x] 修改 ComicStoryboardPage 模型
+- [x] 修改 ComicStoryboardPanel 模型
+- [ ] 更新 processSection 函数
+- [ ] 更新图片生成逻辑
+- [ ] 更新 repository 方法
+- [ ] 提交并推送更改
+
+---
+
+**@YangSen-qn** (Oct 25, 10:22)
+@xgopilot 你的上一次执行没有结果，你需要重新再执行一次
+
+---
+
+**@xgopilot** (Oct 25, 10:22)
+codeagent is processing your request, please wait a moment...
+
+---
+
