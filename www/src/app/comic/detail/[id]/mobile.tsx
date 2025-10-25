@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { getComic, getComicSections, type ComicDetail, type ComicSection } from '@/apis/comic'
+import { getComic, type ComicDetail, type ComicSection } from '@/apis/comic'
 
 const ComicDetailMobile = () => {
   const router = useRouter()
@@ -20,17 +20,11 @@ const ComicDetailMobile = () => {
     
     setLoading(true)
     try {
-      const [comicResponse, sectionsResponse] = await Promise.all([
-        getComic(Number(params.id)),
-        getComicSections(Number(params.id))
-      ])
+      const comicResponse = await getComic(Number(params.id))
       
       if (comicResponse.code === 200) {
         setComic(comicResponse.data)
-      }
-      
-      if (sectionsResponse.code === 200) {
-        setSections(sectionsResponse.data)
+        setSections(comicResponse.data.sections || [])
       }
     } catch (error) {
       console.error('Failed to fetch comic data:', error)
