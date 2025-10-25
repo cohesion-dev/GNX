@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"qiniu-ai-image-generator/gnxaigc"
 )
@@ -97,43 +98,77 @@ func main() {
 
 		fmt.Printf("Processing %d storyboard items...\n", len(summary.StoryboardItems))
 
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+
 		for j, item := range summary.StoryboardItems {
-			fmt.Printf("  [%d/%d] Generating image...\n", j+1, len(summary.StoryboardItems))
-			imageData, err := aigc.GenerateImageByText(context.Background(), item.ImagePrompt)
-			if err != nil {
-				fmt.Printf("    Error generating image: %v\n", err)
-			} else {
-				imageFile := filepath.Join(chapterDir, fmt.Sprintf("scene_%03d.png", j+1))
-				if err := os.WriteFile(imageFile, imageData, 0644); err != nil {
-					fmt.Printf("    Error saving image: %v\n", err)
-				} else {
-					fmt.Printf("    Saved image to %s\n", imageFile)
-				}
-			}
+			wg.Add(1)
+			go func(sceneIndex int, sceneItem gnxaigc.StoryboardItem) {
+				defer wg.Done()
 
-			for k, segment := range item.SourceTextSegments {
-				fmt.Printf("  [%d/%d] Generating audio segment %d/%d...\n",
-					j+1, len(summary.StoryboardItems), k+1, len(item.SourceTextSegments))
+				mu.Lock()
+				fmt.Printf("  [%d/%d] Generating image...\n", sceneIndex+1, len(summary.StoryboardItems))
+				mu.Unlock()
 
-				audioData, err := aigc.TextToSpeechSimple(
-					context.Background(),
-					segment.Text,
-					segment.VoiceType,
-					segment.SpeedRatio,
-				)
+				imageData, err := aigc.GenerateImageByText(context.Background(), sceneItem.ImagePrompt)
 				if err != nil {
-					fmt.Printf("    Error generating audio: %v\n", err)
-					continue
+					mu.Lock()
+					fmt.Printf("    Error generating image for scene %d: %v\n", sceneIndex+1, err)
+					mu.Unlock()
+				} else {
+					imageFile := filepath.Join(chapterDir, fmt.Sprintf("scene_%03d.png", sceneIndex+1))
+					if err := os.WriteFile(imageFile, imageData, 0644); err != nil {
+						mu.Lock()
+						fmt.Printf("    Error saving image for scene %d: %v\n", sceneIndex+1, err)
+						mu.Unlock()
+					} else {
+						mu.Lock()
+						fmt.Printf("    Saved image to %s\n", imageFile)
+						mu.Unlock()
+					}
 				}
 
-				audioFile := filepath.Join(chapterDir, fmt.Sprintf("scene_%03d_audio_%03d.mp3", j+1, k+1))
-				if err := os.WriteFile(audioFile, audioData, 0644); err != nil {
-					fmt.Printf("    Error saving audio: %v\n", err)
-				} else {
-					fmt.Printf("    Saved audio to %s\n", audioFile)
+				var audioWg sync.WaitGroup
+				for k, segment := range sceneItem.SourceTextSegments {
+					audioWg.Add(1)
+					go func(audioIndex int, audioSegment gnxaigc.TextSegment) {
+						defer audioWg.Done()
+
+						mu.Lock()
+						fmt.Printf("  [%d/%d] Generating audio segment %d/%d...\n",
+							sceneIndex+1, len(summary.StoryboardItems), audioIndex+1, len(sceneItem.SourceTextSegments))
+						mu.Unlock()
+
+						audioData, err := aigc.TextToSpeechSimple(
+							context.Background(),
+							audioSegment.Text,
+							audioSegment.VoiceType,
+							audioSegment.SpeedRatio,
+						)
+						if err != nil {
+							mu.Lock()
+							fmt.Printf("    Error generating audio for scene %d segment %d: %v\n", sceneIndex+1, audioIndex+1, err)
+							mu.Unlock()
+							return
+						}
+
+						audioFile := filepath.Join(chapterDir, fmt.Sprintf("scene_%03d_audio_%03d.mp3", sceneIndex+1, audioIndex+1))
+						if err := os.WriteFile(audioFile, audioData, 0644); err != nil {
+							mu.Lock()
+							fmt.Printf("    Error saving audio for scene %d segment %d: %v\n", sceneIndex+1, audioIndex+1, err)
+							mu.Unlock()
+						} else {
+							mu.Lock()
+							fmt.Printf("    Saved audio to %s\n", audioFile)
+							mu.Unlock()
+						}
+					}(k, segment)
 				}
-			}
+				audioWg.Wait()
+			}(j, item)
 		}
+
+		wg.Wait()
 
 		fmt.Printf("Chapter %d completed!\n", i+1)
 	}
