@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import '@/styles/globals.css'
 
 export const metadata: Metadata = {
-  title: '沉浸式有声群像漫画',
-  description: '沉浸式有声群像漫画',
+  title: '沉浸式有声漫画群像剧',
+  description: '沉浸式有声漫画群像剧',
 }
 
 export default function RootLayout({
