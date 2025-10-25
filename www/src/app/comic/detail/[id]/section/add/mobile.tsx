@@ -10,7 +10,6 @@ const ComicSectionAddMobile = () => {
   const [comic, setComic] = useState<ComicDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [detail, setDetail] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -51,7 +50,7 @@ const ComicSectionAddMobile = () => {
   }, [])
 
   const handleSubmit = useCallback(async () => {
-    if (!detail.trim() || !file || !params?.id || !comic) {
+    if (!file || !params?.id || !comic) {
       return
     }
 
@@ -60,7 +59,7 @@ const ComicSectionAddMobile = () => {
       const nextIndex = (comic.sections?.length || 0) + 1
       const response = await createSection(Number(params.id), {
         index: nextIndex,
-        detail: detail.trim()
+        file: file
       })
 
       if (response.code === 200) {
@@ -71,9 +70,9 @@ const ComicSectionAddMobile = () => {
     } finally {
       setSubmitting(false)
     }
-  }, [detail, file, params?.id, comic, router])
+  }, [file, params?.id, comic, router])
 
-  const isFormValid = detail.trim() && file
+  const isFormValid = file
 
   return (
     <div className="min-h-screen text-white flex flex-col">
@@ -113,16 +112,6 @@ const ComicSectionAddMobile = () => {
               disabled
               placeholder="漫画名字"
               className="w-full bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none cursor-not-allowed opacity-75"
-            />
-          </div>
-
-          <div>
-            <textarea
-              value={detail}
-              onChange={(e) => setDetail(e.target.value)}
-              placeholder="这一章节的故事梗概.."
-              rows={4}
-              className="w-full bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none"
             />
           </div>
 
