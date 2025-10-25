@@ -226,6 +226,11 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 
 	roleMap := s.updateCharacterFeatures(comic.ID, output.CharacterFeatures)
 
+	updatedRoles, err := s.roleRepo.GetByComicID(comic.ID)
+	if err == nil {
+		comic.Roles = updatedRoles
+	}
+
 	for pageIdx, aiPage := range output.StoryboardPages {
 		page := &models.ComicStoryboardPage{
 			SectionID:   comicSection.ID,
