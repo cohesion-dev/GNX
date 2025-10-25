@@ -179,7 +179,7 @@ const ComicListMobile = () => {
       )}
 
       <div className="fixed top-0 left-0 right-0 bg-slate-900/20 backdrop-blur-lg z-40">
-        <div className="px-6 pt-8 pb-3 text-center flex items-center justify-center">
+        <div className="px-6 pb-3 text-center flex items-center justify-center" style={{ paddingTop: '16px' }}>
           <h1 className="text-xl font-bold">欢迎回家..</h1>
         </div>
       </div>
