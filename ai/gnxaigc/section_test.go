@@ -49,7 +49,7 @@ const TXT = `第一章 山边小村
 　　韩立从未想到，此次出去后钱财的多少对他已失去了意义，他竟然走上了一条与凡人不同的仙业大道，走出了自己的修仙之路。
 `
 
-func TestSummaryChapter(t *testing.T) {
+func TestSummarySection(t *testing.T) {
 	g := NewGnxAIGC(Config{
 		LanguageModel: "deepseek/deepseek-v3.1-terminus",
 	})
@@ -66,7 +66,7 @@ func TestSummaryChapter(t *testing.T) {
 		})
 	}
 
-	resp, err := g.SummaryChapter(context.TODO(), SummaryChapterInput{
+	resp, err := g.SummarySection(context.TODO(), SummarySectionInput{
 		Content:              TXT,
 		AvailableVoiceStyles: voiceItems,
 	})
@@ -75,7 +75,7 @@ func TestSummaryChapter(t *testing.T) {
 	fmt.Printf("%+v\n", resp)
 }
 
-func TestSummaryChapter_Test(t *testing.T) {
+func TestSummarySection_Test(t *testing.T) {
 	g := NewGnxAIGC(Config{})
 	resp, err := g.client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
 		Model: "deepseek/deepseek-v3.1-terminus",

@@ -46,11 +46,11 @@ type CharacterFeature struct {
 	Comment string                 `json:"comment,omitempty"`
 }
 
-type SummaryChapterInput struct {
+type SummarySectionInput struct {
 	// Novel Title 小说标题
 	NovelTitle string
-	// Chapter Title 小说章节标题
-	ChapterTitle string
+	// Section Title 小说章节标题
+	SectionTitle string
 	// 小说某章节的原文内容
 	Content string
 	// 待选的语音风格列表
@@ -79,14 +79,14 @@ type StoryboardItem struct {
 	ImagePrompt string `json:"image_prompt"`
 }
 
-type SummaryChapterOutput struct {
+type SummarySectionOutput struct {
 	// 分镜列表
 	StoryboardItems []StoryboardItem `json:"storyboard_items"`
 	// 输出的角色画像更新
 	CharacterFeatures []CharacterFeature `json:"character_features"`
 }
 
-func (g *GnxAIGC) SummaryChapter(ctx context.Context, input SummaryChapterInput) (*SummaryChapterOutput, error) {
+func (g *GnxAIGC) SummarySection(ctx context.Context, input SummarySectionInput) (*SummarySectionOutput, error) {
 	jsonSchema := map[string]any{
 		"type":     "object",
 		"required": []string{"storyboard_items"},
@@ -164,7 +164,7 @@ func (g *GnxAIGC) SummaryChapter(ctx context.Context, input SummaryChapterInput)
 %s
 `,
 		input.NovelTitle,
-		input.ChapterTitle,
+		input.SectionTitle,
 		func() string {
 			voiceStylesJSON, _ := json.MarshalIndent(input.AvailableVoiceStyles, "", "  ")
 			return string(voiceStylesJSON)
@@ -208,9 +208,9 @@ func (g *GnxAIGC) SummaryChapter(ctx context.Context, input SummaryChapterInput)
 
 	content := resp.Choices[0].Message.Content
 
-	fmt.Printf("SummaryChapter chat completion content: %s\n", content)
+	fmt.Printf("SummarySection chat completion content: %s\n", content)
 
-	var output SummaryChapterOutput
+	var output SummarySectionOutput
 	if err := json.Unmarshal([]byte(content), &output); err == nil {
 		return &output, nil
 	}
