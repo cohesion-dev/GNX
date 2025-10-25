@@ -56,10 +56,11 @@ const ComicSectionAddMobile = () => {
 
     setSubmitting(true)
     try {
+      const fileContent = await file.text()
       const nextIndex = (comic.sections?.length || 0) + 1
       const response = await createSection(Number(params.id), {
         index: nextIndex,
-        file: file
+        detail: fileContent
       })
 
       if (response.code === 200) {

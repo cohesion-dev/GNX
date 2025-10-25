@@ -74,7 +74,7 @@ const ComicDetailMobile = () => {
 
   const handleSectionClick = useCallback((section: ComicSection) => {
     if (section.status === 'completed' && params?.id) {
-      router.push(`/comic/read/${params.id}?section-id=${section.id}`)
+      router.push(`/comic/read/${params.id}?section-index=${section.index}`)
     }
   }, [router, params?.id])
 

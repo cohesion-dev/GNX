@@ -106,7 +106,7 @@ export interface GetComicSectionsResponse {
 
 export interface CreateSectionParams {
   index: number;
-  file: File;
+  detail: string;
 }
 
 export interface CreateSectionResponse {
@@ -162,13 +162,12 @@ export async function getComicSections(id: number): Promise<GetComicSectionsResp
 }
 
 export async function createSection(id: number, params: CreateSectionParams): Promise<CreateSectionResponse> {
-  const formData = new FormData();
-  formData.append('index', params.index.toString());
-  formData.append('file', params.file);
-
   const response = await fetch(`${API_BASE}/comic/${id}/section`, {
     method: 'POST',
-    body: formData,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
   });
   return response.json();
 }
