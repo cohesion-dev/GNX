@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"qiniu-ai-image-generator/gnxaigc"
 )
@@ -404,13 +405,22 @@ func (g *ComicGenerator) generateChapterPages(chapterDir string, summary *gnxaig
 					imageData, err = g.aigc.GenerateImageByText(g.ctx, fullPrompt)
 				}
 			default:
+				composite, mergeErr := mergeImagesSideBySide(referenceImages)
+				if mergeErr != nil {
+					mu.Lock()
+					fmt.Printf("    Warning: failed to merge %d reference images for page %d: %v\n", len(referenceImages), pageIndex+1, mergeErr)
+					mu.Unlock()
+					imageData, err = g.aigc.GenerateImageByText(g.ctx, fullPrompt)
+					break
+				}
+
 				mu.Lock()
-				fmt.Printf("    Using %d reference images for page %d\n", len(referenceImages), pageIndex+1)
+				fmt.Printf("    Merged %d reference images for page %d\n", len(referenceImages), pageIndex+1)
 				mu.Unlock()
-				imageData, err = g.aigc.GenerateImageByImages(g.ctx, referenceImages, fullPrompt)
+				imageData, err = g.aigc.GenerateImageByImage(g.ctx, composite, fullPrompt)
 				if err != nil {
 					mu.Lock()
-					fmt.Printf("    Error generating page image via multi img2img: %v\n", err)
+					fmt.Printf("    Error generating page image via merged img2img: %v\n", err)
 					fmt.Printf("    Falling back to text-to-image for page %d\n", pageIndex+1)
 					mu.Unlock()
 					imageData, err = g.aigc.GenerateImageByText(g.ctx, fullPrompt)
@@ -455,12 +465,34 @@ func (g *ComicGenerator) generateChapterPages(chapterDir string, summary *gnxaig
 						fmt.Printf("  [Page %d/%d] Panel %d audio %d/%d...\n", pageIndex+1, totalPages, panelIndex+1, audioIndex+1, totalSegments)
 						mu.Unlock()
 
-						audioData, err := g.aigc.TextToSpeechSimple(
-							g.ctx,
-							audioSegment.Text,
-							audioSegment.VoiceType,
-							audioSegment.SpeedRatio,
+						const maxTTSAudioRetries = 3
+						var (
+							audioData []byte
+							err       error
 						)
+
+						for attempt := 1; attempt <= maxTTSAudioRetries; attempt++ {
+							audioData, err = g.aigc.TextToSpeechSimple(
+								g.ctx,
+								audioSegment.Text,
+								audioSegment.VoiceType,
+								audioSegment.SpeedRatio,
+							)
+							if err == nil {
+								break
+							}
+
+							if attempt == maxTTSAudioRetries || !isRateLimitError(err) {
+								break
+							}
+
+							sleep := time.Second * time.Duration(attempt)
+							mu.Lock()
+							fmt.Printf("    Rate limited generating audio for page %d panel %d segment %d, retrying in %s\n", pageIndex+1, panelIndex+1, audioIndex+1, sleep)
+							mu.Unlock()
+							time.Sleep(sleep)
+						}
+
 						if err != nil {
 							mu.Lock()
 							fmt.Printf("    Error generating audio for page %d panel %d segment %d: %v\n", pageIndex+1, panelIndex+1, audioIndex+1, err)
@@ -547,4 +579,13 @@ func (g *ComicGenerator) writeGlobalManifest() error {
 	}
 
 	return nil
+}
+
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "429") || strings.Contains(msg, "rate limit")
 }
