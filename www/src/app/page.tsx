@@ -8,7 +8,7 @@ const Home = observer(() => {
   const router = useRouter()
 
   useEffect(() => {
-    router.push('/comic')
+    router.push('/comic/')
   }, [router])
 
   return null
