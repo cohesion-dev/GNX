@@ -12,7 +12,6 @@ import (
 	"github.com/cohesion-dev/GNX/backend/internal/middleware"
 	"github.com/cohesion-dev/GNX/backend/internal/repositories"
 	"github.com/cohesion-dev/GNX/backend/internal/services"
-	"github.com/cohesion-dev/GNX/backend/pkg/ai"
 	"github.com/cohesion-dev/GNX/backend/pkg/storage"
 )
 
@@ -37,7 +36,6 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 	sectionRepo := repositories.NewSectionRepository(db)
 	storyboardRepo := repositories.NewStoryboardRepository(db)
 
-	aiService := ai.NewOpenAIClient(cfg.OpenAI.APIKey)
 	aigcService := gnxaigc.NewGnxAIGC(gnxaigc.Config{
 		APIKey:        cfg.OpenAI.APIKey,
 		BaseURL:       cfg.OpenAI.BaseURL,
@@ -66,7 +64,6 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 		storyboardRepo,
 		roleRepo,
 		comicRepo,
-		aiService,
 		storageService,
 		db,
 	)

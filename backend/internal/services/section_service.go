@@ -7,7 +7,6 @@ import (
 
 	"github.com/cohesion-dev/GNX/backend/internal/models"
 	"github.com/cohesion-dev/GNX/backend/internal/repositories"
-	"github.com/cohesion-dev/GNX/backend/pkg/ai"
 	"github.com/cohesion-dev/GNX/backend/pkg/storage"
 )
 
@@ -16,7 +15,6 @@ type SectionService struct {
 	storyboardRepo *repositories.StoryboardRepository
 	roleRepo       *repositories.RoleRepository
 	comicRepo      *repositories.ComicRepository
-	aiService      *ai.OpenAIClient
 	storageService *storage.QiniuClient
 	db             *gorm.DB
 }
@@ -26,7 +24,6 @@ func NewSectionService(
 	storyboardRepo *repositories.StoryboardRepository,
 	roleRepo *repositories.RoleRepository,
 	comicRepo *repositories.ComicRepository,
-	aiService *ai.OpenAIClient,
 	storageService *storage.QiniuClient,
 	db *gorm.DB,
 ) *SectionService {
@@ -35,7 +32,6 @@ func NewSectionService(
 		storyboardRepo: storyboardRepo,
 		roleRepo:       roleRepo,
 		comicRepo:      comicRepo,
-		aiService:      aiService,
 		storageService: storageService,
 		db:             db,
 	}
