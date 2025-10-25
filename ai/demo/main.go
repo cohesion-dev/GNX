@@ -17,6 +17,7 @@ func main() {
 	outputDir := flag.String("output", "output", "Output directory for generated comic assets")
 	novelTitle := flag.String("title", "未知小说", "Novel title")
 	maxChapters := flag.Int("max-chapters", 0, "Maximum number of chapters to process (0 for all)")
+	imageStyle := flag.String("image-style", "卡通风格，", "Image style prompt prefix to prepend to each scene's image prompt")
 	flag.Parse()
 
 	if *inputFile == "" {
@@ -123,7 +124,8 @@ func main() {
 				fmt.Printf("  [%d/%d] Generating image...\n", sceneIndex+1, len(summary.StoryboardItems))
 				mu.Unlock()
 
-				imageData, err := aigc.GenerateImageByText(context.Background(), sceneItem.ImagePrompt)
+				fullPrompt := *imageStyle + sceneItem.ImagePrompt
+				imageData, err := aigc.GenerateImageByText(context.Background(), fullPrompt)
 				if err != nil {
 					mu.Lock()
 					fmt.Printf("    Error generating image for scene %d: %v\n", sceneIndex+1, err)
