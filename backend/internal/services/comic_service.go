@@ -18,13 +18,13 @@ import (
 )
 
 type ComicService struct {
-	comicRepo       *repositories.ComicRepository
-	roleRepo        *repositories.RoleRepository
-	sectionRepo     *repositories.SectionRepository
-	storyboardRepo  *repositories.StoryboardRepository
-	storageService  *storage.QiniuClient
-	aigcService     *gnxaigc.GnxAIGC
-	db              *gorm.DB
+	comicRepo      *repositories.ComicRepository
+	roleRepo       *repositories.RoleRepository
+	sectionRepo    *repositories.SectionRepository
+	storyboardRepo *repositories.StoryboardRepository
+	storageService *storage.QiniuClient
+	aigcService    *gnxaigc.GnxAIGC
+	db             *gorm.DB
 }
 
 func NewComicService(
@@ -209,11 +209,11 @@ func (s *ComicService) processSection(comicID uint, section utils.Section) error
 	}
 
 	input := gnxaigc.SummaryChapterInput{
-		NovelTitle:            comic.Title,
-		ChapterTitle:          section.Title,
-		Content:               section.Content,
-		AvailableVoiceStyles:  ttsVoices,
-		CharacterFeatures:     characterFeatures,
+		NovelTitle:           comic.Title,
+		ChapterTitle:         section.Title,
+		Content:              section.Content,
+		AvailableVoiceStyles: ttsVoices,
+		CharacterFeatures:    characterFeatures,
 	}
 
 	output, err := s.aigcService.SummaryChapter(ctx, input)
@@ -224,37 +224,39 @@ func (s *ComicService) processSection(comicID uint, section utils.Section) error
 
 	s.updateCharacterFeatures(comicID, output.CharacterFeatures)
 
-	for idx, storyboardItem := range output.StoryboardItems {
-		storyboard := &models.ComicStoryboard{
-			SectionID:   comicSection.ID,
-			Index:       idx + 1,
-			ImagePrompt: storyboardItem.ImagePrompt,
-			Status:      "pending",
-		}
-
-		if err := s.storyboardRepo.Create(storyboard); err != nil {
-			continue
-		}
-
-		for detailIdx, segment := range storyboardItem.SourceTextSegments {
-			detail := &models.ComicStoryboardDetail{
-				StoryboardID: storyboard.ID,
-				Index:        detailIdx + 1,
-				Text:         segment.Text,
-				VoiceName:    segment.VoiceName,
-				VoiceType:    segment.VoiceType,
-				SpeedRatio:   segment.SpeedRatio,
-				IsNarration:  segment.IsNarration,
+	for idx, storyboardPage := range output.StoryboardPages {
+		for panelIdx, panel := range storyboardPage.Panels {
+			storyboard := &models.ComicStoryboard{
+				SectionID:   comicSection.ID,
+				Index:       idx*len(storyboardPage.Panels) + panelIdx + 1,
+				ImagePrompt: storyboardPage.ImagePrompt,
+				Status:      "pending",
 			}
 
-			if err := s.storyboardRepo.CreateDetail(detail); err != nil {
+			if err := s.storyboardRepo.Create(storyboard); err != nil {
 				continue
 			}
 
-			go s.generateTTS(detail.ID, segment.Text, segment.VoiceType, segment.SpeedRatio)
-		}
+			for detailIdx, segment := range panel.SourceTextSegments {
+				detail := &models.ComicStoryboardDetail{
+					StoryboardID: storyboard.ID,
+					Index:        detailIdx + 1,
+					Text:         segment.Text,
+					VoiceName:    segment.VoiceName,
+					VoiceType:    segment.VoiceType,
+					SpeedRatio:   segment.SpeedRatio,
+					IsNarration:  segment.IsNarration,
+				}
 
-		go s.generateStoryboardImage(storyboard.ID, storyboardItem.ImagePrompt)
+				if err := s.storyboardRepo.CreateDetail(detail); err != nil {
+					continue
+				}
+
+				go s.generateTTS(detail.ID, segment.Text, segment.VoiceType, segment.SpeedRatio)
+			}
+
+			go s.generateStoryboardImage(storyboard.ID, storyboardPage.ImagePrompt)
+		}
 	}
 
 	s.sectionRepo.UpdateStatus(comicSection.ID, "completed")
