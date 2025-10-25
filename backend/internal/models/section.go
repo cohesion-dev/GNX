@@ -14,8 +14,8 @@ type ComicSection struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	Comic       Comic             `json:"comic,omitempty" gorm:"foreignKey:ComicID"`
-	Storyboards []ComicStoryboard `json:"storyboards,omitempty" gorm:"foreignKey:SectionID"`
+	Comic Comic                  `json:"comic,omitempty" gorm:"foreignKey:ComicID"`
+	Pages []ComicStoryboardPage `json:"pages,omitempty" gorm:"foreignKey:SectionID"`
 }
 
 func (ComicSection) TableName() string {

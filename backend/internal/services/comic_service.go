@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sync"
 	"time"
 
@@ -59,7 +58,7 @@ func (s *ComicService) CreateComic(title, userPrompt string, fileContent io.Read
 		return nil, fmt.Errorf("comic with title '%s' already exists", title)
 	}
 
-	content, err := ioutil.ReadAll(fileContent)
+	content, err := io.ReadAll(fileContent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
@@ -86,7 +85,7 @@ func (s *ComicService) AppendSections(comicID uint, fileContent io.Reader) error
 		return fmt.Errorf("comic not found: %w", err)
 	}
 
-	content, err := ioutil.ReadAll(fileContent)
+	content, err := io.ReadAll(fileContent)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
 	}

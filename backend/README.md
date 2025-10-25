@@ -56,9 +56,20 @@
 ## 环境变量
 
 ```bash
+# 服务器配置
 SERVER_PORT=8080
-DATABASE_URL=postgresql://user:password@localhost:5432/gnx
+
+# 数据库配置
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_NAME=gnx
+
+# OpenAI 配置
 OPENAI_API_KEY=your_openai_api_key
+
+# 七牛云配置
 QINIU_ACCESS_KEY=your_qiniu_access_key
 QINIU_SECRET_KEY=your_qiniu_secret_key
 QINIU_BUCKET=your_bucket_name

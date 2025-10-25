@@ -5,6 +5,7 @@ import (
 
 	"github.com/cohesion-dev/GNX/backend/config"
 	"github.com/cohesion-dev/GNX/backend/internal/models"
+	"github.com/cohesion-dev/GNX/backend/pkg/database"
 )
 
 func main() {
@@ -13,7 +14,15 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	db, err := config.SetupDatabase(cfg)
+	dbCfg := &database.Config{
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DBName:   cfg.Database.DBName,
+	}
+
+	db, err := database.InitDatabase(dbCfg)
 	if err != nil {
 		log.Fatalf("Failed to setup database: %v", err)
 	}
@@ -24,8 +33,9 @@ func main() {
 		&models.Comic{},
 		&models.ComicRole{},
 		&models.ComicSection{},
-		&models.ComicStoryboard{},
-		&models.ComicStoryboardDetail{},
+		&models.ComicStoryboardPage{},
+		&models.ComicStoryboardPanel{},
+		&models.ComicStoryboardSegment{},
 	); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
