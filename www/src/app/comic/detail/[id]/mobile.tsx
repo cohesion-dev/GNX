@@ -170,9 +170,9 @@ const ComicDetailMobile = () => {
             >
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <h3 className="font-medium text-base">
+                  <h3 className="text-base">
                     <span className="text-cyan-400">第 {section.index} 章</span>
-                    {section.detail && <span className="text-white"> {section.detail}</span>}
+                    {section.detail && <span className="text-white ml-3">{section.detail}</span>}
                   </h3>
                 </div>
                 {section.status === 'pending' && (
