@@ -255,11 +255,11 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 			}
 
 			for segIdx, aiSegment := range aiPanel.SourceTextSegments {
-				characterRefsJSON, _ := json.Marshal(aiSegment.CharacterRefs)
+				characterNamesJSON, _ := json.Marshal(aiSegment.CharacterNames)
 
 				var roleID *uint
-				if len(aiSegment.CharacterRefs) > 0 && aiSegment.CharacterRefs[0] < len(output.CharacterFeatures) {
-					characterName := output.CharacterFeatures[aiSegment.CharacterRefs[0]].Basic.Name
+				if len(aiSegment.CharacterNames) > 0 {
+					characterName := aiSegment.CharacterNames[0]
 					if id, exists := roleMap[characterName]; exists {
 						roleID = &id
 					}
@@ -269,7 +269,7 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 					PanelID:       panel.ID,
 					Index:         segIdx + 1,
 					Text:          aiSegment.Text,
-					CharacterRefs: string(characterRefsJSON),
+					CharacterRefs: string(characterNamesJSON),
 					RoleID:        roleID,
 				}
 
