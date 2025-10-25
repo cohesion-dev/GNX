@@ -84,6 +84,12 @@ func TestSummaryChapter(t *testing.T) {
 		prompt := ComposePageImagePrompt("", page)
 		require.NotEmpty(t, prompt)
 	}
+	require.Greater(t, len(resp.CharacterFeatures), 0)
+	for _, feature := range resp.CharacterFeatures {
+		require.NotEmpty(t, feature.Basic.Name)
+		require.NotEmpty(t, feature.Visual.Hair)
+		require.NotEmpty(t, feature.ConceptArtPrompt)
+	}
 	fmt.Printf("%+v\n", resp)
 }
 

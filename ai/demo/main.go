@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"unicode"
 
 	"qiniu-ai-image-generator/gnxaigc"
 )
@@ -101,6 +103,46 @@ func main() {
 		}
 
 		characterFeatures = summary.CharacterFeatures
+
+		characterDir := filepath.Join(chapterDir, "characters")
+		if err := os.MkdirAll(characterDir, 0755); err != nil {
+			fmt.Printf("Error creating character directory: %v\n", err)
+		} else {
+			fmt.Printf("Generating %d character concept images...\n", len(summary.CharacterFeatures))
+			for idx, feature := range summary.CharacterFeatures {
+				prompt := strings.TrimSpace(feature.ConceptArtPrompt)
+				if prompt == "" {
+					fmt.Printf("  [Character %d] Missing concept_art_prompt for %s, skip.\n", idx+1, feature.Basic.Name)
+					continue
+				}
+
+				trimmedStyle := strings.TrimSpace(*imageStyle)
+				fullPrompt := prompt
+				if trimmedStyle != "" {
+					fullPrompt = fmt.Sprintf("%s %s", trimmedStyle, prompt)
+				}
+
+				fmt.Printf("  [Character %d] Generating concept art for %s\n", idx+1, feature.Basic.Name)
+				imageData, err := aigc.GenerateImageByText(context.Background(), fullPrompt)
+				if err != nil {
+					fmt.Printf("    Error generating concept art: %v\n", err)
+					continue
+				}
+
+				fileStem := sanitizeCharacterFileStem(feature.Basic.Name, idx)
+				imageFile := filepath.Join(characterDir, fmt.Sprintf("%s.png", fileStem))
+				if err := os.WriteFile(imageFile, imageData, 0644); err != nil {
+					fmt.Printf("    Error saving concept art: %v\n", err)
+				} else {
+					fmt.Printf("    Saved concept art to %s\n", imageFile)
+				}
+
+				promptFile := filepath.Join(characterDir, fmt.Sprintf("%s_prompt.txt", fileStem))
+				if err := os.WriteFile(promptFile, []byte(fullPrompt+"\n"), 0644); err != nil {
+					fmt.Printf("    Error saving concept prompt: %v\n", err)
+				}
+			}
+		}
 
 		storyboardJSON, _ := json.MarshalIndent(summary, "", "  ")
 		storyboardFile := filepath.Join(chapterDir, "storyboard.json")
@@ -205,4 +247,24 @@ func main() {
 	fmt.Printf("\n=== Comic Generation Complete ===\n")
 	fmt.Printf("Processed %d chapters\n", processCount)
 	fmt.Printf("Output saved to: %s\n", *outputDir)
+}
+
+func sanitizeCharacterFileStem(name string, index int) string {
+	base := strings.TrimSpace(name)
+	if base == "" {
+		return fmt.Sprintf("character_%02d", index+1)
+	}
+	var builder strings.Builder
+	for _, r := range base {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(r)
+		} else {
+			builder.WriteRune('_')
+		}
+	}
+	cleaned := strings.Trim(builder.String(), "_")
+	if cleaned == "" {
+		return fmt.Sprintf("character_%02d", index+1)
+	}
+	return cleaned
 }

@@ -45,6 +45,10 @@ type CharacterFeature struct {
 	Visual  CharacterVisualProfile `json:"visual"`
 	TTS     CharacterTTSProfile    `json:"tts"`
 	Comment string                 `json:"comment,omitempty"`
+	// ConceptArtPrompt 用于生成角色原画的英文提示词，保证跨页一致
+	ConceptArtPrompt string `json:"concept_art_prompt"`
+	// ConceptArtNotes 可选补充说明，记录与上一章的差异或微调方向
+	ConceptArtNotes string `json:"concept_art_notes,omitempty"`
 }
 
 type SummaryChapterInput struct {
@@ -98,7 +102,7 @@ type StoryboardPage struct {
 type SummaryChapterOutput struct {
 	// 分页分镜列表
 	StoryboardPages []StoryboardPage `json:"storyboard_pages"`
-	// 输出的角色画像更新
+	// 输出的角色画像更新（含原画提示词，需提供给下游图生图流程）
 	CharacterFeatures []CharacterFeature `json:"character_features"`
 }
 
@@ -125,10 +129,21 @@ func buildVoiceStylesJSON(items []TTSVoiceItem) string {
 	return string(bs)
 }
 
+func buildCharacterFeaturesJSON(items []CharacterFeature) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+	bs, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return "[]"
+	}
+	return string(bs)
+}
+
 func buildStoryboardSchema(maxPanelsPerPage int) map[string]any {
 	return map[string]any{
 		"type":     "object",
-		"required": []string{"storyboard_pages"},
+		"required": []string{"storyboard_pages", "character_features"},
 		"properties": map[string]any{
 			"storyboard_pages": map[string]any{
 				"type":     "array",
@@ -216,6 +231,61 @@ func buildStoryboardSchema(maxPanelsPerPage int) map[string]any {
 					},
 				},
 			},
+			"character_features": map[string]any{
+				"type":        "array",
+				"description": "本章涉及的角色画像配置，用于指导原画与后续面板生成。",
+				"minItems":    1,
+				"items": map[string]any{
+					"type": "object",
+					"required": []string{
+						"basic",
+						"visual",
+						"tts",
+						"concept_art_prompt",
+					},
+					"properties": map[string]any{
+						"basic": map[string]any{
+							"type":     "object",
+							"required": []string{"name", "gender", "age"},
+							"properties": map[string]any{
+								"name":   map[string]any{"type": "string"},
+								"gender": map[string]any{"type": "string"},
+								"age":    map[string]any{"type": "string"},
+							},
+						},
+						"visual": map[string]any{
+							"type":     "object",
+							"required": []string{"hair", "habitual_expression", "skin_tone", "face_shape"},
+							"properties": map[string]any{
+								"hair":                map[string]any{"type": "string"},
+								"habitual_expression": map[string]any{"type": "string"},
+								"skin_tone":           map[string]any{"type": "string"},
+								"face_shape":          map[string]any{"type": "string"},
+							},
+						},
+						"tts": map[string]any{
+							"type":     "object",
+							"required": []string{"voice_name", "voice_type", "speed_ratio"},
+							"properties": map[string]any{
+								"voice_name":  map[string]any{"type": "string"},
+								"voice_type":  map[string]any{"type": "string"},
+								"speed_ratio": map[string]any{"type": "number"},
+							},
+						},
+						"concept_art_prompt": map[string]any{
+							"type":        "string",
+							"description": "用于生成角色原画的英文提示词。",
+						},
+						"concept_art_notes": map[string]any{
+							"type":        "string",
+							"description": "可选补充说明，写明与上一章的差异或微调方向。",
+						},
+						"comment": map[string]any{
+							"type": "string",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -223,12 +293,17 @@ func buildStoryboardSchema(maxPanelsPerPage int) map[string]any {
 func buildSummaryChapterPrompt(input SummaryChapterInput, voiceStylesJSON, schemaJSON string, maxPanelsPerPage int) string {
 	novelTitle := input.NovelTitle
 	chapterTitle := input.ChapterTitle
+	existingCharactersJSON := buildCharacterFeaturesJSON(input.CharacterFeatures)
 	return fmt.Sprintf(`
 你是一个擅长从小说生成动漫分镜和配音选择的设计师，后续用户将给你每一章的小说原文，你需要按指定的输出格式进行输出。
 
 当前用户选择的小说标题为：《%s》，章节标题为：《%s》。如果你熟悉该小说的背景设定和角色人设，也可以结合你已有的知识进行参考。
 
 配音选择时，你可以从以下提供的语音风格列表中选择合适的语音风格：
+
+%s
+
+以下为已知的角色画像配置（可能来自上一章的原画或既有设定，若为空表示为初次出场）：
 
 %s
 
@@ -240,6 +315,13 @@ func buildSummaryChapterPrompt(input SummaryChapterInput, voiceStylesJSON, schem
 3. 在 image_prompt 中，总结整页应呈现的整体风格、氛围与需要统一的视觉要素，并说明应绘制为多分格漫画页面，保持 panel 之间通过细边框分隔。
 4. 所有 layout_hint、visual_prompt 与 image_prompt 必须使用英语描述，不得出现任何中文字符，也不要提示模型在图像中加入文字。
 
+在输出的 character_features 中，请：
+1. 覆盖本章出现的每位角色（含新角色与历史角色），并输出英文的 concept_art_prompt，确保可直接用于角色原画的文生图。
+2. 若角色已经在已有配置中出现，请继承其既有视觉特征，必要时仅在 concept_art_notes 中注明微调要点，并保持 core design 一致。
+3. 若角色为全新出场，请在 concept_art_notes 中注明 "new character"，并给出灵感来源或与剧情相关的设计理由。
+4. concept_art_prompt 必须避免引导模型生成文字或中文字符，应聚焦于角色造型、服装、配色、光线、姿态等视觉细节。
+5. 请确保 storyboard_pages 中对角色的描写与对应的 concept_art_prompt 一致，避免跨页设定冲突。
+
 请严格按照以下给定的JSONSchema, 仅输出一个合法的 JSON 对象, 不要包含任何前导或后续的说明文字、代码块标记、引号等进行输出结果的编写，确保输出内容**严格符合JSONSchema的要求**且格式正确:
 
 %s
@@ -247,6 +329,7 @@ func buildSummaryChapterPrompt(input SummaryChapterInput, voiceStylesJSON, schem
 		novelTitle,
 		chapterTitle,
 		voiceStylesJSON,
+		existingCharactersJSON,
 		maxPanelsPerPage,
 		schemaJSON,
 	)
