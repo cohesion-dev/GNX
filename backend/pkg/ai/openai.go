@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/cohesion-dev/GNX/backend/internal/models"
@@ -141,7 +141,7 @@ func (c *OpenAIClient) GenerateImage(prompt, userPrompt string) ([]byte, error) 
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (c *OpenAIClient) GenerateImage(prompt, userPrompt string) ([]byte, error) 
 	}
 	defer imageResp.Body.Close()
 
-	return ioutil.ReadAll(imageResp.Body)
+	return io.ReadAll(imageResp.Body)
 }
 
 func (c *OpenAIClient) chatCompletion(prompt string) (string, error) {
@@ -204,7 +204,7 @@ func (c *OpenAIClient) chatCompletion(prompt string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
