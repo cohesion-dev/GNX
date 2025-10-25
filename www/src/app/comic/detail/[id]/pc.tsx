@@ -1,10 +1,11 @@
-import { observer } from 'mobx-react-lite'
+'use client'
 
-const ComicDetailPC = observer(() => {
+const ComicDetailPC = () => {
   return (
     <div>
+      Hello World PC
     </div>
   )
-})
+}
 
 export default ComicDetailPC
