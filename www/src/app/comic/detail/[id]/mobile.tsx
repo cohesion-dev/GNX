@@ -74,7 +74,7 @@ const ComicDetailMobile = () => {
 
   const handleSectionClick = useCallback((section: ComicSection) => {
     if (section.status === 'completed' && params?.id) {
-      router.push(`/comic/${params.id}/section/${section.id}`)
+      router.push(`/comic/read/${params.id}?section-id=${section.id}`)
     }
   }, [router, params?.id])
 
@@ -151,9 +151,6 @@ const ComicDetailMobile = () => {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-cyan-400 font-bold text-lg mb-2">
-                  {comic.title}
-                </h2>
                 <p className="text-gray-300 text-sm line-clamp-5">
                   {comic.brief}
                 </p>
@@ -174,13 +171,8 @@ const ComicDetailMobile = () => {
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <h3 className="text-cyan-400 font-medium text-base">
-                    第 {section.index} 章
+                    第 {section.index} 章{section.detail && ` ${section.detail}`}
                   </h3>
-                  {section.detail && (
-                    <p className="text-gray-300 text-sm mt-1 line-clamp-2">
-                      {section.detail}
-                    </p>
-                  )}
                 </div>
                 {section.status === 'pending' && (
                   <svg
