@@ -68,7 +68,7 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 		db,
 	)
 
-	ttsService := services.NewTTSService(storyboardRepo)
+	ttsService := services.NewTTSService(storyboardRepo, aigcService, storageService)
 
 	comicHandler := handlers.NewComicHandler(comicService)
 	sectionHandler := handlers.NewSectionHandler(sectionService)
