@@ -59,3 +59,60 @@ func (r *StoryboardRepository) GetByID(id uint) (*models.ComicStoryboard, error)
 	err := r.db.First(&storyboard, id).Error
 	return &storyboard, err
 }
+
+func (r *StoryboardRepository) CreatePage(page *models.ComicStoryboardPage) error {
+	return r.db.Create(page).Error
+}
+
+func (r *StoryboardRepository) GetPageByID(pageID uint) (*models.ComicStoryboardPage, error) {
+	var page models.ComicStoryboardPage
+	err := r.db.First(&page, pageID).Error
+	return &page, err
+}
+
+func (r *StoryboardRepository) GetPagesBySectionID(sectionID uint) ([]models.ComicStoryboardPage, error) {
+	var pages []models.ComicStoryboardPage
+	err := r.db.
+		Where("section_id = ?", sectionID).
+		Order("index ASC").
+		Preload("Panels", func(db *gorm.DB) *gorm.DB {
+			return db.Order("index ASC").
+				Preload("Segments", func(db *gorm.DB) *gorm.DB {
+					return db.Order("index ASC").Preload("Role")
+				})
+		}).
+		Find(&pages).Error
+	return pages, err
+}
+
+func (r *StoryboardRepository) UpdatePageImageURL(pageID uint, imageURL string) error {
+	return r.db.Model(&models.ComicStoryboardPage{}).
+		Where("id = ?", pageID).
+		Update("image_url", imageURL).Error
+}
+
+func (r *StoryboardRepository) UpdatePageStatus(pageID uint, status string) error {
+	return r.db.Model(&models.ComicStoryboardPage{}).
+		Where("id = ?", pageID).
+		Update("status", status).Error
+}
+
+func (r *StoryboardRepository) CreatePanel(panel *models.ComicStoryboardPanel) error {
+	return r.db.Create(panel).Error
+}
+
+func (r *StoryboardRepository) UpdatePanelStatus(panelID uint, status string) error {
+	return r.db.Model(&models.ComicStoryboardPanel{}).
+		Where("id = ?", panelID).
+		Update("status", status).Error
+}
+
+func (r *StoryboardRepository) CreateSegment(segment *models.ComicStoryboardSegment) error {
+	return r.db.Create(segment).Error
+}
+
+func (r *StoryboardRepository) UpdateSegmentTTSURL(segmentID uint, ttsURL string) error {
+	return r.db.Model(&models.ComicStoryboardSegment{}).
+		Where("id = ?", segmentID).
+		Update("tts_url", ttsURL).Error
+}
