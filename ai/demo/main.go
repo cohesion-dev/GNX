@@ -110,31 +110,32 @@ func main() {
 			fmt.Printf("Saved storyboard to %s\n", storyboardFile)
 		}
 
-		fmt.Printf("Processing %d storyboard items...\n", len(summary.StoryboardItems))
+		totalPages := len(summary.StoryboardPages)
+		fmt.Printf("Processing %d storyboard pages...\n", totalPages)
 
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 
-		for j, item := range summary.StoryboardItems {
+		for j, page := range summary.StoryboardPages {
 			wg.Add(1)
-			go func(sceneIndex int, sceneItem gnxaigc.StoryboardItem) {
+			go func(pageIndex int, pageItem gnxaigc.StoryboardPage, total int) {
 				defer wg.Done()
 
 				mu.Lock()
-				fmt.Printf("  [%d/%d] Generating image...\n", sceneIndex+1, len(summary.StoryboardItems))
+				fmt.Printf("  [Page %d/%d] Generating image...\n", pageIndex+1, total)
 				mu.Unlock()
 
-				fullPrompt := *imageStyle + sceneItem.ImagePrompt
+				fullPrompt := gnxaigc.ComposePageImagePrompt(*imageStyle, pageItem)
 				imageData, err := aigc.GenerateImageByText(context.Background(), fullPrompt)
 				if err != nil {
 					mu.Lock()
-					fmt.Printf("    Error generating image for scene %d: %v\n", sceneIndex+1, err)
+					fmt.Printf("    Error generating image for page %d: %v\n", pageIndex+1, err)
 					mu.Unlock()
 				} else {
-					imageFile := filepath.Join(chapterDir, fmt.Sprintf("scene_%03d.png", sceneIndex+1))
+					imageFile := filepath.Join(chapterDir, fmt.Sprintf("page_%03d.png", pageIndex+1))
 					if err := os.WriteFile(imageFile, imageData, 0644); err != nil {
 						mu.Lock()
-						fmt.Printf("    Error saving image for scene %d: %v\n", sceneIndex+1, err)
+						fmt.Printf("    Error saving image for page %d: %v\n", pageIndex+1, err)
 						mu.Unlock()
 					} else {
 						mu.Lock()
@@ -144,43 +145,56 @@ func main() {
 				}
 
 				var audioWg sync.WaitGroup
-				for k, segment := range sceneItem.SourceTextSegments {
-					audioWg.Add(1)
-					go func(audioIndex int, audioSegment gnxaigc.SourceTextSegment) {
-						defer audioWg.Done()
+				for panelIdx, panel := range pageItem.Panels {
+					segmentCount := len(panel.SourceTextSegments)
+					for segIdx, segment := range panel.SourceTextSegments {
+						audioWg.Add(1)
+						go func(panelIndex, audioIndex, totalSegments int, audioSegment gnxaigc.SourceTextSegment) {
+							defer audioWg.Done()
 
-						mu.Lock()
-						fmt.Printf("  [%d/%d] Generating audio segment %d/%d...\n",
-							sceneIndex+1, len(summary.StoryboardItems), audioIndex+1, len(sceneItem.SourceTextSegments))
-						mu.Unlock()
+							mu.Lock()
+							fmt.Printf("  [Page %d/%d] Panel %d audio %d/%d...\n",
+								pageIndex+1, total, panelIndex+1, audioIndex+1, totalSegments)
+							mu.Unlock()
 
-						audioData, err := aigc.TextToSpeechSimple(
-							context.Background(),
-							audioSegment.Text,
-							audioSegment.VoiceType,
-							audioSegment.SpeedRatio,
-						)
-						if err != nil {
-							mu.Lock()
-							fmt.Printf("    Error generating audio for scene %d segment %d: %v\n", sceneIndex+1, audioIndex+1, err)
-							mu.Unlock()
-							return
-						}
+							audioData, err := aigc.TextToSpeechSimple(
+								context.Background(),
+								audioSegment.Text,
+								audioSegment.VoiceType,
+								audioSegment.SpeedRatio,
+							)
+							if err != nil {
+								mu.Lock()
+								fmt.Printf("    Error generating audio for page %d panel %d segment %d: %v\n",
+									pageIndex+1, panelIndex+1, audioIndex+1, err)
+								mu.Unlock()
+								return
+							}
 
-						audioFile := filepath.Join(chapterDir, fmt.Sprintf("scene_%03d_audio_%03d.mp3", sceneIndex+1, audioIndex+1))
-						if err := os.WriteFile(audioFile, audioData, 0644); err != nil {
-							mu.Lock()
-							fmt.Printf("    Error saving audio for scene %d segment %d: %v\n", sceneIndex+1, audioIndex+1, err)
-							mu.Unlock()
-						} else {
-							mu.Lock()
-							fmt.Printf("    Saved audio to %s\n", audioFile)
-							mu.Unlock()
-						}
-					}(k, segment)
+							audioFile := filepath.Join(
+								chapterDir,
+								fmt.Sprintf(
+									"page_%03d_panel_%02d_audio_%03d.mp3",
+									pageIndex+1,
+									panelIndex+1,
+									audioIndex+1,
+								),
+							)
+							if err := os.WriteFile(audioFile, audioData, 0644); err != nil {
+								mu.Lock()
+								fmt.Printf("    Error saving audio for page %d panel %d segment %d: %v\n",
+									pageIndex+1, panelIndex+1, audioIndex+1, err)
+								mu.Unlock()
+							} else {
+								mu.Lock()
+								fmt.Printf("    Saved audio to %s\n", audioFile)
+								mu.Unlock()
+							}
+						}(panelIdx, segIdx, segmentCount, segment)
+					}
 				}
 				audioWg.Wait()
-			}(j, item)
+			}(j, page, totalPages)
 		}
 
 		wg.Wait()
