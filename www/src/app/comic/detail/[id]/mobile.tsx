@@ -1,10 +1,11 @@
-import { observer } from 'mobx-react-lite'
+'use client'
 
-const ComicDetailMobile = observer(() => {
+const ComicDetailMobile = () => {
   return (
     <div>
+      Hello World Mobile
     </div>
   )
-})
+}
 
 export default ComicDetailMobile
