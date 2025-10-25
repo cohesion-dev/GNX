@@ -46,8 +46,8 @@ CREATE TABLE IF NOT EXISTS `comic_storyboard_panel` (
   FOREIGN KEY (`page_id`) REFERENCES `comic_storyboard_page`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='漫画分格表，对应AI StoryboardPanel';
 
--- 3. Rename comic_storyboard_detail to source_text_segment and restructure
-CREATE TABLE IF NOT EXISTS `source_text_segment` (
+-- 3. Rename comic_storyboard_detail to comic_storyboard_segment and restructure
+CREATE TABLE IF NOT EXISTS `comic_storyboard_segment` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `panel_id` INT UNSIGNED NOT NULL COMMENT '所属分格ID',
   `index` INT NOT NULL COMMENT '在分格中的索引（从1开始）',
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS `source_text_segment` (
   INDEX `idx_role` (`role_id`),
   FOREIGN KEY (`panel_id`) REFERENCES `comic_storyboard_panel`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`role_id`) REFERENCES `comic_role`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='源文本片段表，对应AI SourceTextSegment';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='漫画分格文本片段表，对应AI SourceTextSegment';
 
 -- 4. Drop old tables (after data migration if needed)
 -- WARNING: This will delete all existing storyboard data!
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS `source_text_segment` (
 -- you need to write custom migration logic to:
 --   1. Create a page for each existing storyboard
 --   2. Create a panel for each existing storyboard (1:1 mapping)
---   3. Migrate comic_storyboard_detail to source_text_segment
+--   3. Migrate comic_storyboard_detail to comic_storyboard_segment
 --
 -- Example migration logic (commented out, customize as needed):
 -- INSERT INTO comic_storyboard_page (section_id, `index`, image_prompt, layout_hint, image_url, status, created_at, updated_at)
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS `source_text_segment` (
 -- FROM comic_storyboard s
 -- JOIN comic_storyboard_page p ON s.section_id = p.section_id AND s.`index` = p.`index`;
 --
--- INSERT INTO source_text_segment (panel_id, `index`, text, voice_name, voice_type, speed_ratio, is_narration, tts_url, created_at, updated_at)
+-- INSERT INTO comic_storyboard_segment (panel_id, `index`, text, voice_name, voice_type, speed_ratio, is_narration, tts_url, created_at, updated_at)
 -- SELECT panel.id, d.`index`, d.text, d.voice_name, d.voice_type, d.speed_ratio, d.is_narration, d.tts_url, d.created_at, d.updated_at
 -- FROM comic_storyboard_detail d
 -- JOIN comic_storyboard s ON d.storyboard_id = s.id

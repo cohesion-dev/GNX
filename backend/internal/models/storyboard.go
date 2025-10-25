@@ -20,14 +20,14 @@ type ComicStoryboardPanel struct {
 
 	Section              ComicSection        `json:"section,omitempty" gorm:"foreignKey:SectionID"`
 	Page                 ComicStoryboardPage `json:"page,omitempty" gorm:"foreignKey:PageID"`
-	SourceTextSegments   []SourceTextSegment `json:"source_text_segments,omitempty" gorm:"foreignKey:PanelID"`
+	SourceTextSegments   []ComicStoryboardSegment `json:"source_text_segments,omitempty" gorm:"foreignKey:PanelID"`
 }
 
 func (ComicStoryboardPanel) TableName() string {
 	return "comic_storyboard_panel"
 }
 
-type SourceTextSegment struct {
+type ComicStoryboardSegment struct {
 	ID      uint `json:"id" gorm:"primaryKey"`
 	PanelID uint `json:"panel_id" gorm:"not null;index:idx_panel_segment"`
 	Index   int  `json:"index" gorm:"not null"`
@@ -44,6 +44,6 @@ type SourceTextSegment struct {
 	Role  *ComicRole           `json:"role,omitempty" gorm:"foreignKey:RoleID"`
 }
 
-func (SourceTextSegment) TableName() string {
-	return "source_text_segment"
+func (ComicStoryboardSegment) TableName() string {
+	return "comic_storyboard_segment"
 }

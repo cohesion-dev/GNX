@@ -37,7 +37,7 @@ func (s *TTSService) GetTTSAudio(segmentID uint) ([]byte, error) {
 	}
 
 	if segment.TTSUrl != "" {
-		resp, err := http.Get(detail.TTSUrl)
+		resp, err := http.Get(segment.TTSUrl)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch cached audio: %w", err)
 		}

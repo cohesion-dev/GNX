@@ -24,7 +24,7 @@ func (r *StoryboardRepository) CreatePanel(panel *models.ComicStoryboardPanel) e
 	return r.db.Create(panel).Error
 }
 
-func (r *StoryboardRepository) CreateSegment(segment *models.SourceTextSegment) error {
+func (r *StoryboardRepository) CreateSegment(segment *models.ComicStoryboardSegment) error {
 	return r.db.Create(segment).Error
 }
 
@@ -55,8 +55,8 @@ func (r *StoryboardRepository) GetPanelByID(panelID uint) (*models.ComicStoryboa
 	return &panel, err
 }
 
-func (r *StoryboardRepository) GetSegmentByID(segmentID uint) (*models.SourceTextSegment, error) {
-	var segment models.SourceTextSegment
+func (r *StoryboardRepository) GetSegmentByID(segmentID uint) (*models.ComicStoryboardSegment, error) {
+	var segment models.ComicStoryboardSegment
 	err := r.db.First(&segment, segmentID).Error
 	return &segment, err
 }
@@ -78,5 +78,5 @@ func (r *StoryboardRepository) UpdatePanelStatus(panelID uint, status string) er
 }
 
 func (r *StoryboardRepository) UpdateSegmentTTSURL(segmentID uint, ttsURL string) error {
-	return r.db.Model(&models.SourceTextSegment{}).Where("id = ?", segmentID).Update("tts_url", ttsURL).Error
+	return r.db.Model(&models.ComicStoryboardSegment{}).Where("id = ?", segmentID).Update("tts_url", ttsURL).Error
 }

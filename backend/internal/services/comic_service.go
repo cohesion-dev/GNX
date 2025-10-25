@@ -125,10 +125,16 @@ func (s *ComicService) processComicGeneration(comicID uint, content []byte) {
 		return
 	}
 
+	comic, err := s.comicRepo.GetByIDWithRelations(comicID)
+	if err != nil {
+		s.comicRepo.UpdateStatus(comicID, "failed")
+		return
+	}
+
 	sections := utils.ParseNovelSections(string(content))
 
 	for _, section := range sections {
-		if err := s.processSection(comicID, section); err != nil {
+		if err := s.processSection(comic, section); err != nil {
 			continue
 		}
 	}
@@ -147,7 +153,7 @@ func (s *ComicService) processSectionAppend(comic *models.Comic, content []byte)
 	sections := utils.ParseNovelSections(string(content))
 
 	for _, section := range sections {
-		if err := s.processSection(comic.ID, section); err != nil {
+		if err := s.processSection(comic, section); err != nil {
 			continue
 		}
 	}
@@ -157,14 +163,9 @@ func (s *ComicService) processSectionAppend(comic *models.Comic, content []byte)
 	}
 }
 
-func (s *ComicService) processSection(comicID uint, section utils.Section) error {
-	comic, err := s.comicRepo.GetByIDWithRelations(comicID)
-	if err != nil {
-		return err
-	}
-
+func (s *ComicService) processSection(comic *models.Comic, section utils.Section) error {
 	comicSection := &models.ComicSection{
-		ComicID: comicID,
+		ComicID: comic.ID,
 		Index:   section.Index,
 		Title:   section.Title,
 		Detail:  section.Content,
@@ -223,7 +224,7 @@ func (s *ComicService) processSection(comicID uint, section utils.Section) error
 		return err
 	}
 
-	roleMap := s.updateCharacterFeatures(comicID, output.CharacterFeatures)
+	roleMap := s.updateCharacterFeatures(comic.ID, output.CharacterFeatures)
 
 	for pageIdx, aiPage := range output.StoryboardPages {
 		page := &models.ComicStoryboardPage{
@@ -264,7 +265,7 @@ func (s *ComicService) processSection(comicID uint, section utils.Section) error
 					}
 				}
 
-				segment := &models.SourceTextSegment{
+				segment := &models.ComicStoryboardSegment{
 					PanelID:       panel.ID,
 					Index:         segIdx + 1,
 					Text:          aiSegment.Text,
