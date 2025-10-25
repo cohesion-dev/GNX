@@ -27,11 +27,11 @@ func (h *TTSHandler) GetTTSAudio(c *gin.Context) {
 		return
 	}
 
-	audioURL, err := h.ttsService.GetTTSAudio(uint(detailID))
+	audioData, err := h.ttsService.GetTTSAudio(uint(detailID))
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusNotFound, "TTS audio not found", err.Error())
 		return
 	}
 
-	c.Redirect(http.StatusFound, audioURL)
+	c.Data(http.StatusOK, "audio/mpeg", audioData)
 }

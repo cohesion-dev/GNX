@@ -38,7 +38,7 @@ func (r *StoryboardRepository) GetBySectionIDWithDetails(sectionID uint) ([]mode
 
 func (r *StoryboardRepository) GetDetailByID(id uint) (*models.ComicStoryboardDetail, error) {
 	var detail models.ComicStoryboardDetail
-	err := r.db.First(&detail, id).Error
+	err := r.db.Preload("Role").First(&detail, id).Error
 	return &detail, err
 }
 
