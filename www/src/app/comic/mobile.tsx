@@ -37,7 +37,7 @@ const ComicListMobile = () => {
             key={item.id}
             className="bg-white/10 backdrop-blur-md rounded-3xl p-4 m-6"
           >
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center">
               <div className="w-16 h-16 flex items-center justify-center bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-full overflow-hidden flex-shrink-0">
                 <span className="text-3xl">📚</span>
               </div>
