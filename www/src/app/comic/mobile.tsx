@@ -184,7 +184,7 @@ const ComicListMobile = () => {
         </div>
       </div>
 
-      <div className="px-6 mt-16 space-y-4 pb-24">
+      <div className="px-6 mt-20 space-y-4 pb-24">
         {comics.map((comic) => (
           <div
             key={comic.id}
