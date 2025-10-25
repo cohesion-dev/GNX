@@ -63,7 +63,6 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 		storyboardRepo,
 		roleRepo,
 		comicRepo,
-		aiService,
 		storageService,
 		db,
 	)
