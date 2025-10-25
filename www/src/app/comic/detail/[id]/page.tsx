@@ -7,8 +7,14 @@ import Layout from '@/components/layout'
 const Pc = dynamic(() => import('./pc'), { ssr: false })
 const Mobile = dynamic(() => import('./mobile'), { ssr: false })
 
-const ComicDetail = observer(() => {
-  return <Layout pc={<Pc />} mobile={<Mobile />} />
+interface ComicDetailProps {
+  params: {
+    id: string
+  }
+}
+
+const ComicDetail = observer(({ params }: ComicDetailProps) => {
+  return <Layout pc={<Pc params={params} />} mobile={<Mobile params={params} />} />
 })
 
 export default ComicDetail
