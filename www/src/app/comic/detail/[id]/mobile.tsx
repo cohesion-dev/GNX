@@ -21,7 +21,7 @@ const ComicDetailMobile = ({ params }: ComicDetailMobileProps) => {
   const pullDistance = useRef(0)
 
   const fetchComicData = useCallback(async (isRefresh = false) => {
-    if (loading && !isRefresh) return
+    if (!params?.id || (loading && !isRefresh)) return
     
     setLoading(true)
     try {
@@ -43,7 +43,7 @@ const ComicDetailMobile = ({ params }: ComicDetailMobileProps) => {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [params.id, loading])
+  }, [params?.id])
 
   useEffect(() => {
     fetchComicData(true)
@@ -84,10 +84,10 @@ const ComicDetailMobile = ({ params }: ComicDetailMobileProps) => {
   }, [router])
 
   const handleSectionClick = useCallback((section: ComicSection) => {
-    if (section.status === 'completed') {
+    if (section.status === 'completed' && params?.id) {
       router.push(`/comic/${params.id}/section/${section.id}`)
     }
-  }, [router, params.id])
+  }, [router, params?.id])
 
   return (
     <div 
