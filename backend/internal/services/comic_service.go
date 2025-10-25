@@ -79,7 +79,7 @@ func (s *ComicService) CreateComic(title, userPrompt string, fileContent io.Read
 	return comic, nil
 }
 
-func (s *ComicService) AppendChapters(comicID uint, fileContent io.Reader) error {
+func (s *ComicService) AppendSections(comicID uint, fileContent io.Reader) error {
 	comic, err := s.comicRepo.GetByIDWithRelations(comicID)
 	if err != nil {
 		return fmt.Errorf("comic not found: %w", err)
@@ -90,7 +90,7 @@ func (s *ComicService) AppendChapters(comicID uint, fileContent io.Reader) error
 		return fmt.Errorf("failed to read file: %w", err)
 	}
 
-	go s.processChapterAppend(comic, content)
+	go s.processSectionAppend(comic, content)
 
 	return nil
 }
@@ -124,10 +124,10 @@ func (s *ComicService) processComicGeneration(comicID uint, content []byte) {
 		return
 	}
 
-	chapters := utils.ParseNovelChapters(string(content))
+	sections := utils.ParseNovelSections(string(content))
 
-	for _, chapter := range chapters {
-		if err := s.processChapter(comicID, chapter); err != nil {
+	for _, section := range sections {
+		if err := s.processSection(comicID, section); err != nil {
 			continue
 		}
 	}
@@ -140,16 +140,16 @@ func (s *ComicService) processComicGeneration(comicID uint, content []byte) {
 	s.comicRepo.UpdateStatus(comicID, "completed")
 }
 
-func (s *ComicService) processChapterAppend(comic *models.Comic, content []byte) {
+func (s *ComicService) processSectionAppend(comic *models.Comic, content []byte) {
 	defer func() {
 		if r := recover(); r != nil {
 		}
 	}()
 
-	chapters := utils.ParseNovelChapters(string(content))
+	sections := utils.ParseNovelSections(string(content))
 
-	for _, chapter := range chapters {
-		if err := s.processChapter(comic.ID, chapter); err != nil {
+	for _, section := range sections {
+		if err := s.processSection(comic.ID, section); err != nil {
 			continue
 		}
 	}
@@ -159,21 +159,21 @@ func (s *ComicService) processChapterAppend(comic *models.Comic, content []byte)
 	}
 }
 
-func (s *ComicService) processChapter(comicID uint, chapter utils.Chapter) error {
+func (s *ComicService) processSection(comicID uint, section utils.Section) error {
 	comic, err := s.comicRepo.GetByIDWithRelations(comicID)
 	if err != nil {
 		return err
 	}
 
-	section := &models.ComicSection{
+	comicSection := &models.ComicSection{
 		ComicID: comicID,
-		Index:   chapter.Index,
-		Title:   chapter.Title,
-		Detail:  chapter.Content,
+		Index:   section.Index,
+		Title:   section.Title,
+		Detail:  section.Content,
 		Status:  "processing",
 	}
 
-	if err := s.sectionRepo.Create(section); err != nil {
+	if err := s.sectionRepo.Create(comicSection); err != nil {
 		return err
 	}
 
@@ -213,15 +213,15 @@ func (s *ComicService) processChapter(comicID uint, chapter utils.Chapter) error
 
 	input := gnxaigc.SummaryChapterInput{
 		NovelTitle:            comic.Title,
-		ChapterTitle:          chapter.Title,
-		Content:               chapter.Content,
+		ChapterTitle:          section.Title,
+		Content:               section.Content,
 		AvailableVoiceStyles:  ttsVoices,
 		CharacterFeatures:     characterFeatures,
 	}
 
 	output, err := s.aigcService.SummaryChapter(ctx, input)
 	if err != nil {
-		s.sectionRepo.UpdateStatus(section.ID, "failed")
+		s.sectionRepo.UpdateStatus(comicSection.ID, "failed")
 		return err
 	}
 
@@ -229,7 +229,7 @@ func (s *ComicService) processChapter(comicID uint, chapter utils.Chapter) error
 
 	for idx, storyboardItem := range output.StoryboardItems {
 		storyboard := &models.ComicStoryboard{
-			SectionID:   section.ID,
+			SectionID:   comicSection.ID,
 			Index:       idx + 1,
 			ImagePrompt: storyboardItem.ImagePrompt,
 			Status:      "pending",
@@ -260,7 +260,7 @@ func (s *ComicService) processChapter(comicID uint, chapter utils.Chapter) error
 		go s.generateStoryboardImage(storyboard.ID, storyboardItem.ImagePrompt)
 	}
 
-	s.sectionRepo.UpdateStatus(section.ID, "completed")
+	s.sectionRepo.UpdateStatus(comicSection.ID, "completed")
 	return nil
 }
 

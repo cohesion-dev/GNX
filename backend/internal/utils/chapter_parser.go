@@ -5,25 +5,25 @@ import (
 	"strings"
 )
 
-type Chapter struct {
+type Section struct {
 	Index   int
 	Title   string
 	Content string
 }
 
-func ParseNovelChapters(content string) []Chapter {
+func ParseNovelSections(content string) []Section {
 	chapterPattern := regexp.MustCompile(`(?m)^(第[一二三四五六七八九十百千0-9]+[章节回]|Chapter\s*\d+|[0-9]+\.)\s*(.+?)$`)
 	
 	matches := chapterPattern.FindAllStringIndex(content, -1)
 	if len(matches) == 0 {
-		return []Chapter{{
+		return []Section{{
 			Index:   1,
 			Title:   "第一章",
 			Content: strings.TrimSpace(content),
 		}}
 	}
 	
-	var chapters []Chapter
+	var sections []Section
 	for i, match := range matches {
 		startIdx := match[0]
 		var endIdx int
@@ -33,23 +33,23 @@ func ParseNovelChapters(content string) []Chapter {
 			endIdx = len(content)
 		}
 		
-		chapterText := content[startIdx:endIdx]
-		lines := strings.SplitN(chapterText, "\n", 2)
+		sectionText := content[startIdx:endIdx]
+		lines := strings.SplitN(sectionText, "\n", 2)
 		title := strings.TrimSpace(lines[0])
 		
-		var chapterContent string
+		var sectionContent string
 		if len(lines) > 1 {
-			chapterContent = strings.TrimSpace(lines[1])
+			sectionContent = strings.TrimSpace(lines[1])
 		}
 		
-		if chapterContent != "" {
-			chapters = append(chapters, Chapter{
+		if sectionContent != "" {
+			sections = append(sections, Section{
 				Index:   i + 1,
 				Title:   title,
-				Content: chapterContent,
+				Content: sectionContent,
 			})
 		}
 	}
 	
-	return chapters
+	return sections
 }

@@ -111,7 +111,7 @@ func (h *ComicHandler) GetComicSections(c *gin.Context) {
 	utils.SuccessResponse(c, sections)
 }
 
-func (h *ComicHandler) AppendChapters(c *gin.Context) {
+func (h *ComicHandler) AppendSections(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, "Invalid comic ID", err.Error())
@@ -131,10 +131,10 @@ func (h *ComicHandler) AppendChapters(c *gin.Context) {
 	}
 	defer fileContent.Close()
 
-	if err := h.comicService.AppendChapters(uint(id), fileContent); err != nil {
-		utils.ErrorResponse(c, http.StatusInternalServerError, "Failed to append chapters", err.Error())
+	if err := h.comicService.AppendSections(uint(id), fileContent); err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Failed to append sections", err.Error())
 		return
 	}
 
-	utils.SuccessResponse(c, gin.H{"message": "Chapters appending started"})
+	utils.SuccessResponse(c, gin.H{"message": "Sections appending started"})
 }
