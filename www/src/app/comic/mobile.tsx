@@ -187,8 +187,10 @@ const ComicListMobile = () => {
           <div
             key={comic.id}
             onClick={() => handleComicClick(comic)}
-            className={`bg-white/10 backdrop-blur-md rounded-3xl p-4 m-6 cursor-pointer transition-transform ${
+            className={`bg-white/10 backdrop-blur-md rounded-3xl p-4 m-6 transition-transform ${
               shakeId === comic.id ? 'animate-shake' : ''
+            } ${
+              comic.status === 'completed' ? 'cursor-pointer' : 'cursor-not-allowed'
             }`}
             style={{
               animation: shakeId === comic.id ? 'shake 0.5s' : undefined
@@ -246,11 +248,11 @@ const ComicListMobile = () => {
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-lg border-t border-white/10">
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-lg">
         <div className="flex justify-around py-3 px-6">
           <button
             onClick={handleAddClick}
-            className="w-12 h-12 flex items-center justify-center bg-cyan-400/20 backdrop-blur-sm rounded-full"
+            className="w-12 h-12 flex items-center justify-center bg-cyan-400/20 backdrop-blur-sm rounded-full cursor-pointer"
             aria-label="添加"
           >
             <svg
