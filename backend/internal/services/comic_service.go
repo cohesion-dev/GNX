@@ -292,7 +292,7 @@ func (s *ComicService) processSection(comicID uint, section utils.Section) error
 
 func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.CharacterFeature) map[string]uint {
 	roleMap := make(map[string]uint)
-	
+
 	for _, feature := range features {
 		existingRole, err := s.roleRepo.GetByNameAndComicID(feature.Basic.Name, comicID)
 		if err != nil || existingRole == nil {
@@ -330,7 +330,7 @@ func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.
 			roleMap[existingRole.Name] = existingRole.ID
 		}
 	}
-	
+
 	return roleMap
 }
 

@@ -5,14 +5,14 @@ import (
 )
 
 type ComicStoryboardPage struct {
-	ID        uint   `json:"id" gorm:"primaryKey"`
-	SectionID uint   `json:"section_id" gorm:"not null;index:idx_section_page"`
-	Index     int    `json:"index" gorm:"not null"`
-	
+	ID        uint `json:"id" gorm:"primaryKey"`
+	SectionID uint `json:"section_id" gorm:"not null;index:idx_section_page"`
+	Index     int  `json:"index" gorm:"not null"`
+
 	ImagePrompt string `json:"image_prompt" gorm:"type:text;not null"`
 	LayoutHint  string `json:"layout_hint" gorm:"type:text;not null"`
 	PageSummary string `json:"page_summary,omitempty" gorm:"type:text"`
-	
+
 	Status    string    `json:"status" gorm:"size:20;default:'pending'"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

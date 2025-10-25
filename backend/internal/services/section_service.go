@@ -94,4 +94,3 @@ func (s *SectionService) GetStoryboards(comicID, sectionID uint) ([]models.Comic
 
 	return s.storyboardRepo.GetPagesBySectionID(sectionID)
 }
-
