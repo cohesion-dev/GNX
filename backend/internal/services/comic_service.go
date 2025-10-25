@@ -1,41 +1,48 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sync"
+	"time"
 
 	"gorm.io/gorm"
 
+	"github.com/cohesion-dev/GNX/ai/gnxaigc"
 	"github.com/cohesion-dev/GNX/backend/internal/models"
 	"github.com/cohesion-dev/GNX/backend/internal/repositories"
-	"github.com/cohesion-dev/GNX/backend/pkg/ai"
+	"github.com/cohesion-dev/GNX/backend/internal/utils"
 	"github.com/cohesion-dev/GNX/backend/pkg/storage"
 )
 
 type ComicService struct {
-	comicRepo      *repositories.ComicRepository
-	roleRepo       *repositories.RoleRepository
-	sectionRepo    *repositories.SectionRepository
-	aiService      *ai.OpenAIClient
-	storageService *storage.QiniuClient
-	db             *gorm.DB
+	comicRepo       *repositories.ComicRepository
+	roleRepo        *repositories.RoleRepository
+	sectionRepo     *repositories.SectionRepository
+	storyboardRepo  *repositories.StoryboardRepository
+	storageService  *storage.QiniuClient
+	aigcService     *gnxaigc.GnxAIGC
+	db              *gorm.DB
 }
 
 func NewComicService(
 	comicRepo *repositories.ComicRepository,
 	roleRepo *repositories.RoleRepository,
 	sectionRepo *repositories.SectionRepository,
-	aiService *ai.OpenAIClient,
+	storyboardRepo *repositories.StoryboardRepository,
 	storageService *storage.QiniuClient,
+	aigcService *gnxaigc.GnxAIGC,
 	db *gorm.DB,
 ) *ComicService {
 	return &ComicService{
 		comicRepo:      comicRepo,
 		roleRepo:       roleRepo,
 		sectionRepo:    sectionRepo,
-		aiService:      aiService,
+		storyboardRepo: storyboardRepo,
 		storageService: storageService,
+		aigcService:    aigcService,
 		db:             db,
 	}
 }
@@ -46,24 +53,46 @@ func (s *ComicService) GetComicList(page, limit int, status string) ([]models.Co
 }
 
 func (s *ComicService) CreateComic(title, userPrompt string, fileContent io.Reader) (*models.Comic, error) {
+	existingComic, err := s.comicRepo.GetByTitle(title)
+	if err == nil && existingComic.ID > 0 {
+		return nil, fmt.Errorf("comic with title '%s' already exists", title)
+	}
+
 	content, err := ioutil.ReadAll(fileContent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	comic := &models.Comic{
-		Title:      title,
-		UserPrompt: userPrompt,
-		Status:     "pending",
+		Title:          title,
+		UserPrompt:     userPrompt,
+		Status:         "pending",
+		HasMoreContent: true,
 	}
 
 	if err := s.comicRepo.Create(comic); err != nil {
 		return nil, fmt.Errorf("failed to create comic: %w", err)
 	}
 
-	go s.processComicGeneration(comic.ID, string(content), userPrompt)
+	go s.processComicGeneration(comic.ID, content)
 
 	return comic, nil
+}
+
+func (s *ComicService) AppendChapters(comicID uint, fileContent io.Reader) error {
+	comic, err := s.comicRepo.GetByIDWithRelations(comicID)
+	if err != nil {
+		return fmt.Errorf("comic not found: %w", err)
+	}
+
+	content, err := ioutil.ReadAll(fileContent)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	go s.processChapterAppend(comic, content)
+
+	return nil
 }
 
 func (s *ComicService) GetComicDetail(id uint) (*models.Comic, error) {
@@ -74,73 +103,279 @@ func (s *ComicService) GetComicSections(id uint) ([]models.ComicSection, error) 
 	return s.sectionRepo.GetByComicID(id)
 }
 
-func (s *ComicService) processComicGeneration(comicID uint, content, userPrompt string) {
+func (s *ComicService) processComicGeneration(comicID uint, content []byte) {
 	defer func() {
 		if r := recover(); r != nil {
 			s.comicRepo.UpdateStatus(comicID, "failed")
 		}
 	}()
 
-	analysis, err := s.aiService.AnalyzeNovel(content, userPrompt)
+	s.comicRepo.UpdateStatus(comicID, "processing")
+
+	novelFileKey := fmt.Sprintf("comics/%d/novel_%d.txt", comicID, time.Now().Unix())
+	novelFileURL, err := s.storageService.UploadFile(novelFileKey, content, "text/plain")
 	if err != nil {
 		s.comicRepo.UpdateStatus(comicID, "failed")
 		return
 	}
 
-	if err := s.comicRepo.UpdateBrief(comicID, analysis.Brief); err != nil {
+	if err := s.comicRepo.UpdateNovelFileURL(comicID, novelFileURL); err != nil {
 		s.comicRepo.UpdateStatus(comicID, "failed")
 		return
 	}
 
-	for _, roleInfo := range analysis.Roles {
-		role := &models.ComicRole{
-			ComicID: comicID,
-			Name:    roleInfo.Name,
-			Brief:   roleInfo.Brief,
-			Voice:   roleInfo.Voice,
+	chapters := utils.ParseNovelChapters(string(content))
+
+	for _, chapter := range chapters {
+		if err := s.processChapter(comicID, chapter); err != nil {
+			continue
 		}
-		if err := s.roleRepo.Create(role); err != nil {
+	}
+
+	comic, _ := s.comicRepo.GetByIDWithRelations(comicID)
+	if !comic.HasMoreContent {
+		s.generateComicIconAndBg(comicID)
+	}
+
+	s.comicRepo.UpdateStatus(comicID, "completed")
+}
+
+func (s *ComicService) processChapterAppend(comic *models.Comic, content []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+		}
+	}()
+
+	chapters := utils.ParseNovelChapters(string(content))
+
+	for _, chapter := range chapters {
+		if err := s.processChapter(comic.ID, chapter); err != nil {
+			continue
+		}
+	}
+
+	if !comic.HasMoreContent && comic.Icon == "" {
+		s.generateComicIconAndBg(comic.ID)
+	}
+}
+
+func (s *ComicService) processChapter(comicID uint, chapter utils.Chapter) error {
+	comic, err := s.comicRepo.GetByIDWithRelations(comicID)
+	if err != nil {
+		return err
+	}
+
+	section := &models.ComicSection{
+		ComicID: comicID,
+		Index:   chapter.Index,
+		Title:   chapter.Title,
+		Detail:  chapter.Content,
+		Status:  "processing",
+	}
+
+	if err := s.sectionRepo.Create(section); err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	availableVoices, _ := s.aigcService.GetVoiceList(ctx)
+	var ttsVoices []gnxaigc.TTSVoiceItem
+	for _, v := range availableVoices {
+		ttsVoices = append(ttsVoices, gnxaigc.TTSVoiceItem{
+			VoiceName: v.VoiceName,
+			VoiceType: v.VoiceType,
+		})
+	}
+
+	var characterFeatures []gnxaigc.CharacterFeature
+	for _, role := range comic.Roles {
+		characterFeatures = append(characterFeatures, gnxaigc.CharacterFeature{
+			Basic: gnxaigc.CharacterBasicProfile{
+				Name:   role.Name,
+				Gender: role.Gender,
+				Age:    role.Age,
+			},
+			Visual: gnxaigc.CharacterVisualProfile{
+				Hair:               role.Hair,
+				HabitualExpression: role.HabitualExpr,
+				SkinTone:           role.SkinTone,
+				FaceShape:          role.FaceShape,
+			},
+			TTS: gnxaigc.CharacterTTSProfile{
+				VoiceName:  role.VoiceName,
+				VoiceType:  role.VoiceType,
+				SpeedRatio: role.SpeedRatio,
+			},
+			Comment: role.Brief,
+		})
+	}
+
+	input := gnxaigc.SummaryChapterInput{
+		NovelTitle:            comic.Title,
+		ChapterTitle:          chapter.Title,
+		Content:               chapter.Content,
+		AvailableVoiceStyles:  ttsVoices,
+		CharacterFeatures:     characterFeatures,
+	}
+
+	output, err := s.aigcService.SummaryChapter(ctx, input)
+	if err != nil {
+		s.sectionRepo.UpdateStatus(section.ID, "failed")
+		return err
+	}
+
+	s.updateCharacterFeatures(comicID, output.CharacterFeatures)
+
+	for idx, storyboardItem := range output.StoryboardItems {
+		storyboard := &models.ComicStoryboard{
+			SectionID:   section.ID,
+			Index:       idx + 1,
+			ImagePrompt: storyboardItem.ImagePrompt,
+			Status:      "pending",
+		}
+
+		if err := s.storyboardRepo.Create(storyboard); err != nil {
 			continue
 		}
 
-		go s.generateRoleImage(role.ID, roleInfo.ImagePrompt, userPrompt)
+		for detailIdx, segment := range storyboardItem.SourceTextSegments {
+			detail := &models.ComicStoryboardDetail{
+				StoryboardID: storyboard.ID,
+				Index:        detailIdx + 1,
+				Text:         segment.Text,
+				VoiceName:    segment.VoiceName,
+				VoiceType:    segment.VoiceType,
+				SpeedRatio:   segment.SpeedRatio,
+				IsNarration:  segment.IsNarration,
+			}
+
+			if err := s.storyboardRepo.CreateDetail(detail); err != nil {
+				continue
+			}
+
+			go s.generateTTS(detail.ID, segment.Text, segment.VoiceType, segment.SpeedRatio)
+		}
+
+		go s.generateStoryboardImage(storyboard.ID, storyboardItem.ImagePrompt)
 	}
 
-	go s.generateComicImages(comicID, analysis.IconPrompt, analysis.BgPrompt, userPrompt)
+	s.sectionRepo.UpdateStatus(section.ID, "completed")
+	return nil
+}
 
-	if err := s.comicRepo.UpdateStatus(comicID, "completed"); err != nil {
-		return
+func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.CharacterFeature) {
+	for _, feature := range features {
+		existingRole, err := s.roleRepo.GetByNameAndComicID(feature.Basic.Name, comicID)
+		if err != nil || existingRole == nil {
+			role := &models.ComicRole{
+				ComicID:      comicID,
+				Name:         feature.Basic.Name,
+				Gender:       feature.Basic.Gender,
+				Age:          feature.Basic.Age,
+				Hair:         feature.Visual.Hair,
+				HabitualExpr: feature.Visual.HabitualExpression,
+				SkinTone:     feature.Visual.SkinTone,
+				FaceShape:    feature.Visual.FaceShape,
+				VoiceName:    feature.TTS.VoiceName,
+				VoiceType:    feature.TTS.VoiceType,
+				SpeedRatio:   feature.TTS.SpeedRatio,
+				Brief:        feature.Comment,
+			}
+			s.roleRepo.Create(role)
+		} else {
+			updates := map[string]interface{}{
+				"gender":        feature.Basic.Gender,
+				"age":           feature.Basic.Age,
+				"hair":          feature.Visual.Hair,
+				"habitual_expr": feature.Visual.HabitualExpression,
+				"skin_tone":     feature.Visual.SkinTone,
+				"face_shape":    feature.Visual.FaceShape,
+				"voice_name":    feature.TTS.VoiceName,
+				"voice_type":    feature.TTS.VoiceType,
+				"speed_ratio":   feature.TTS.SpeedRatio,
+				"brief":         feature.Comment,
+			}
+			s.roleRepo.UpdateByID(existingRole.ID, updates)
+		}
 	}
 }
 
-func (s *ComicService) generateRoleImage(roleID uint, imagePrompt, userPrompt string) {
-	imageData, err := s.aiService.GenerateImage(imagePrompt, userPrompt)
+func (s *ComicService) generateStoryboardImage(storyboardID uint, imagePrompt string) {
+	ctx := context.Background()
+
+	imageData, err := s.aigcService.GenerateImageByText(ctx, imagePrompt)
+	if err != nil {
+		s.storyboardRepo.UpdateStatus(storyboardID, "failed")
+		return
+	}
+
+	imageKey := fmt.Sprintf("storyboards/%d_%d.png", storyboardID, time.Now().Unix())
+	imageURL, err := s.storageService.UploadImage(imageKey, imageData)
+	if err != nil {
+		s.storyboardRepo.UpdateStatus(storyboardID, "failed")
+		return
+	}
+
+	s.storyboardRepo.UpdateImageURL(storyboardID, imageURL)
+	s.storyboardRepo.UpdateStatus(storyboardID, "completed")
+}
+
+func (s *ComicService) generateTTS(detailID uint, text, voiceType string, speedRatio float64) {
+	ctx := context.Background()
+
+	audioData, err := s.aigcService.TextToSpeechSimple(ctx, text, voiceType, speedRatio)
 	if err != nil {
 		return
 	}
 
-	imageURL, err := s.storageService.UploadImage(fmt.Sprintf("roles/%d.png", roleID), imageData)
+	audioKey := fmt.Sprintf("tts/%d_%d.mp3", detailID, time.Now().Unix())
+	audioURL, err := s.storageService.UploadAudio(audioKey, audioData)
 	if err != nil {
 		return
 	}
 
-	s.roleRepo.UpdateImageURL(roleID, imageURL)
+	s.storyboardRepo.UpdateDetailTTSURL(detailID, audioURL)
 }
 
-func (s *ComicService) generateComicImages(comicID uint, iconPrompt, bgPrompt, userPrompt string) {
-	iconData, err := s.aiService.GenerateImage(iconPrompt, userPrompt)
-	if err == nil {
-		iconURL, err := s.storageService.UploadImage(fmt.Sprintf("comics/%d/icon.png", comicID), iconData)
-		if err == nil {
-			s.comicRepo.UpdateIcon(comicID, iconURL)
-		}
+func (s *ComicService) generateComicIconAndBg(comicID uint) {
+	ctx := context.Background()
+	comic, err := s.comicRepo.GetByIDWithRelations(comicID)
+	if err != nil {
+		return
 	}
 
-	bgData, err := s.aiService.GenerateImage(bgPrompt, userPrompt)
-	if err == nil {
-		bgURL, err := s.storageService.UploadImage(fmt.Sprintf("comics/%d/bg.png", comicID), bgData)
-		if err == nil {
-			s.comicRepo.UpdateBg(comicID, bgURL)
-		}
+	var wg sync.WaitGroup
+
+	if comic.Icon == "" && comic.IconPrompt != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			iconData, err := s.aigcService.GenerateImageByText(ctx, comic.IconPrompt)
+			if err == nil {
+				iconKey := fmt.Sprintf("comics/%d/icon_%d.png", comicID, time.Now().Unix())
+				iconURL, err := s.storageService.UploadImage(iconKey, iconData)
+				if err == nil {
+					s.comicRepo.UpdateIcon(comicID, iconURL)
+				}
+			}
+		}()
 	}
+
+	if comic.Bg == "" && comic.BgPrompt != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bgData, err := s.aigcService.GenerateImageByText(ctx, comic.BgPrompt)
+			if err == nil {
+				bgKey := fmt.Sprintf("comics/%d/bg_%d.png", comicID, time.Now().Unix())
+				bgURL, err := s.storageService.UploadImage(bgKey, bgData)
+				if err == nil {
+					s.comicRepo.UpdateBg(comicID, bgURL)
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }

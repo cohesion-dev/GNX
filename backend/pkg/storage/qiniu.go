@@ -32,6 +32,10 @@ func (c *QiniuClient) UploadAudio(key string, data []byte) (string, error) {
 	return c.upload(key, data, "audio/mpeg")
 }
 
+func (c *QiniuClient) UploadFile(key string, data []byte, contentType string) (string, error) {
+	return c.upload(key, data, contentType)
+}
+
 func (c *QiniuClient) upload(key string, data []byte, contentType string) (string, error) {
 	uploadToken := c.generateUploadToken()
 

@@ -70,3 +70,29 @@ func (r *ComicRepository) UpdateIcon(id uint, icon string) error {
 func (r *ComicRepository) UpdateBg(id uint, bg string) error {
 	return r.db.Model(&models.Comic{}).Where("id = ?", id).Update("bg", bg).Error
 }
+
+func (r *ComicRepository) GetByTitle(title string) (*models.Comic, error) {
+	var comic models.Comic
+	err := r.db.Where("title = ?", title).First(&comic).Error
+	return &comic, err
+}
+
+func (r *ComicRepository) UpdateIconPrompt(id uint, prompt string) error {
+	return r.db.Model(&models.Comic{}).Where("id = ?", id).Update("icon_prompt", prompt).Error
+}
+
+func (r *ComicRepository) UpdateBgPrompt(id uint, prompt string) error {
+	return r.db.Model(&models.Comic{}).Where("id = ?", id).Update("bg_prompt", prompt).Error
+}
+
+func (r *ComicRepository) UpdateHasMoreContent(id uint, hasMore bool) error {
+	return r.db.Model(&models.Comic{}).Where("id = ?", id).Update("has_more_content", hasMore).Error
+}
+
+func (r *ComicRepository) UpdateNovelFileURL(id uint, url string) error {
+	return r.db.Model(&models.Comic{}).Where("id = ?", id).Update("novel_file_url", url).Error
+}
+
+func (r *ComicRepository) UpdateComicInfo(id uint, updates map[string]interface{}) error {
+	return r.db.Model(&models.Comic{}).Where("id = ?", id).Updates(updates).Error
+}

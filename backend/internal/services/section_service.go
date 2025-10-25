@@ -126,16 +126,22 @@ func (s *SectionService) processSectionGeneration(sectionID, comicID uint, conte
 			continue
 		}
 
-		for _, detailInfo := range sbInfo.Details {
+		for idx, detailInfo := range sbInfo.Details {
 			detail := &models.ComicStoryboardDetail{
 				StoryboardID: storyboard.ID,
-				Detail:       detailInfo.Text,
+				Index:        idx + 1,
+				Text:         detailInfo.Text,
+				VoiceName:    "",
+				VoiceType:    "",
+				SpeedRatio:   1.0,
 			}
 
 			if detailInfo.RoleName != "" {
 				for _, role := range roles {
 					if role.Name == detailInfo.RoleName {
-						detail.RoleID = &role.ID
+						detail.VoiceName = role.VoiceName
+						detail.VoiceType = role.VoiceType
+						detail.SpeedRatio = role.SpeedRatio
 						break
 					}
 				}
@@ -145,11 +151,8 @@ func (s *SectionService) processSectionGeneration(sectionID, comicID uint, conte
 				continue
 			}
 
-			if detail.RoleID != nil {
-				role, _ := s.roleRepo.GetByID(*detail.RoleID)
-				if role != nil {
-					go s.generateTTS(detail.ID, detailInfo.Text, role.Voice)
-				}
+			if detail.VoiceType != "" {
+				go s.generateTTS(detail.ID, detailInfo.Text, detail.VoiceType)
 			}
 		}
 

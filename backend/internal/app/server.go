@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/cohesion-dev/GNX/ai/gnxaigc"
 	"github.com/cohesion-dev/GNX/backend/config"
 	"github.com/cohesion-dev/GNX/backend/internal/handlers"
 	"github.com/cohesion-dev/GNX/backend/internal/middleware"
@@ -37,6 +38,9 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 	storyboardRepo := repositories.NewStoryboardRepository(db)
 
 	aiService := ai.NewOpenAIClient(cfg.OpenAI.APIKey)
+	aigcService := gnxaigc.NewGnxAIGC(gnxaigc.Config{
+		APIKey: cfg.OpenAI.APIKey,
+	})
 	storageService := storage.NewQiniuClient(
 		cfg.Qiniu.AccessKey,
 		cfg.Qiniu.SecretKey,
@@ -48,8 +52,9 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 		comicRepo,
 		roleRepo,
 		sectionRepo,
-		aiService,
+		storyboardRepo,
 		storageService,
+		aigcService,
 		db,
 	)
 

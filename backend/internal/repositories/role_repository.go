@@ -35,3 +35,16 @@ func (r *RoleRepository) GetByComicID(comicID uint) ([]models.ComicRole, error) 
 func (r *RoleRepository) UpdateImageURL(id uint, imageURL string) error {
 	return r.db.Model(&models.ComicRole{}).Where("id = ?", id).Update("image_url", imageURL).Error
 }
+
+func (r *RoleRepository) GetByNameAndComicID(name string, comicID uint) (*models.ComicRole, error) {
+	var role models.ComicRole
+	err := r.db.Where("name = ? AND comic_id = ?", name, comicID).First(&role).Error
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
+func (r *RoleRepository) UpdateByID(id uint, updates map[string]interface{}) error {
+	return r.db.Model(&models.ComicRole{}).Where("id = ?", id).Updates(updates).Error
+}
