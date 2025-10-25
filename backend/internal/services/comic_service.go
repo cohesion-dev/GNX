@@ -19,13 +19,13 @@ import (
 )
 
 type ComicService struct {
-	comicRepo       *repositories.ComicRepository
-	roleRepo        *repositories.RoleRepository
-	sectionRepo     *repositories.SectionRepository
-	storyboardRepo  *repositories.StoryboardRepository
-	storageService  *storage.QiniuClient
-	aigcService     *gnxaigc.GnxAIGC
-	db              *gorm.DB
+	comicRepo      *repositories.ComicRepository
+	roleRepo       *repositories.RoleRepository
+	sectionRepo    *repositories.SectionRepository
+	storyboardRepo *repositories.StoryboardRepository
+	storageService *storage.QiniuClient
+	aigcService    *gnxaigc.GnxAIGC
+	db             *gorm.DB
 }
 
 func NewComicService(
@@ -134,7 +134,7 @@ func (s *ComicService) processComicGeneration(comicID uint, content []byte) {
 	sections := utils.ParseNovelSections(string(content))
 
 	for _, section := range sections {
-		if err := s.processSection(comic, section); err != nil {
+		if err := s.processSection(comic.ID, section); err != nil {
 			continue
 		}
 	}
@@ -153,7 +153,7 @@ func (s *ComicService) processSectionAppend(comic *models.Comic, content []byte)
 	sections := utils.ParseNovelSections(string(content))
 
 	for _, section := range sections {
-		if err := s.processSection(comic, section); err != nil {
+		if err := s.processSection(comic.ID, section); err != nil {
 			continue
 		}
 	}
@@ -163,9 +163,14 @@ func (s *ComicService) processSectionAppend(comic *models.Comic, content []byte)
 	}
 }
 
-func (s *ComicService) processSection(comic *models.Comic, section utils.Section) error {
+func (s *ComicService) processSection(comicID uint, section utils.Section) error {
+	comic, err := s.comicRepo.GetByIDWithRelations(comicID)
+	if err != nil {
+		return err
+	}
+
 	comicSection := &models.ComicSection{
-		ComicID: comic.ID,
+		ComicID: comicID,
 		Index:   section.Index,
 		Title:   section.Title,
 		Detail:  section.Content,
@@ -211,11 +216,11 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 	}
 
 	input := gnxaigc.SummaryChapterInput{
-		NovelTitle:            comic.Title,
-		ChapterTitle:          section.Title,
-		Content:               section.Content,
-		AvailableVoiceStyles:  ttsVoices,
-		CharacterFeatures:     characterFeatures,
+		NovelTitle:           comic.Title,
+		ChapterTitle:         section.Title,
+		Content:              section.Content,
+		AvailableVoiceStyles: ttsVoices,
+		CharacterFeatures:    characterFeatures,
 	}
 
 	output, err := s.aigcService.SummaryChapter(ctx, input)
@@ -224,8 +229,7 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 		return err
 	}
 
-	roleMap, updatedRoles := s.updateCharacterFeatures(comic.ID, output.CharacterFeatures)
-	comic.Roles = updatedRoles
+	roleMap, _ := s.updateCharacterFeatures(comicID, output.CharacterFeatures)
 
 	for pageIdx, aiPage := range output.StoryboardPages {
 		page := &models.ComicStoryboardPage{
@@ -289,7 +293,7 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.CharacterFeature) (map[string]uint, []models.ComicRole) {
 	roleMap := make(map[string]uint)
 	updatedRoles := make([]models.ComicRole, 0, len(features))
-	
+
 	for _, feature := range features {
 		existingRole, err := s.roleRepo.GetByNameAndComicID(feature.Basic.Name, comicID)
 		if err != nil || existingRole == nil {
@@ -339,7 +343,7 @@ func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.
 			updatedRoles = append(updatedRoles, *existingRole)
 		}
 	}
-	
+
 	return roleMap, updatedRoles
 }
 
@@ -362,7 +366,6 @@ func (s *ComicService) generatePanelImage(panelID uint, aiPanel gnxaigc.Storyboa
 	s.storyboardRepo.UpdatePanelImageURL(panelID, imageURL)
 	s.storyboardRepo.UpdatePanelStatus(panelID, "completed")
 }
-
 
 func (s *ComicService) generateComicIconAndBg(comicID uint) {
 	ctx := context.Background()
