@@ -224,12 +224,8 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 		return err
 	}
 
-	roleMap := s.updateCharacterFeatures(comic.ID, output.CharacterFeatures)
-
-	updatedRoles, err := s.roleRepo.GetByComicID(comic.ID)
-	if err == nil {
-		comic.Roles = updatedRoles
-	}
+	roleMap, updatedRoles := s.updateCharacterFeatures(comic.ID, output.CharacterFeatures)
+	comic.Roles = updatedRoles
 
 	for pageIdx, aiPage := range output.StoryboardPages {
 		page := &models.ComicStoryboardPage{
@@ -290,8 +286,9 @@ func (s *ComicService) processSection(comic *models.Comic, section utils.Section
 	return nil
 }
 
-func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.CharacterFeature) map[string]uint {
+func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.CharacterFeature) (map[string]uint, []models.ComicRole) {
 	roleMap := make(map[string]uint)
+	updatedRoles := make([]models.ComicRole, 0, len(features))
 	
 	for _, feature := range features {
 		existingRole, err := s.roleRepo.GetByNameAndComicID(feature.Basic.Name, comicID)
@@ -312,6 +309,7 @@ func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.
 			}
 			if err := s.roleRepo.Create(role); err == nil {
 				roleMap[role.Name] = role.ID
+				updatedRoles = append(updatedRoles, *role)
 			}
 		} else {
 			updates := map[string]interface{}{
@@ -327,11 +325,22 @@ func (s *ComicService) updateCharacterFeatures(comicID uint, features []gnxaigc.
 				"brief":         feature.Comment,
 			}
 			s.roleRepo.UpdateByID(existingRole.ID, updates)
+			existingRole.Gender = feature.Basic.Gender
+			existingRole.Age = feature.Basic.Age
+			existingRole.Hair = feature.Visual.Hair
+			existingRole.HabitualExpr = feature.Visual.HabitualExpression
+			existingRole.SkinTone = feature.Visual.SkinTone
+			existingRole.FaceShape = feature.Visual.FaceShape
+			existingRole.VoiceName = feature.TTS.VoiceName
+			existingRole.VoiceType = feature.TTS.VoiceType
+			existingRole.SpeedRatio = feature.TTS.SpeedRatio
+			existingRole.Brief = feature.Comment
 			roleMap[existingRole.Name] = existingRole.ID
+			updatedRoles = append(updatedRoles, *existingRole)
 		}
 	}
 	
-	return roleMap
+	return roleMap, updatedRoles
 }
 
 func (s *ComicService) generatePanelImage(panelID uint, aiPanel gnxaigc.StoryboardPanel) {
