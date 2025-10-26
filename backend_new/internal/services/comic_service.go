@@ -18,12 +18,13 @@ import (
 var chapterHeadingPattern = regexp.MustCompile(`^第[零〇一二三四五六七八九十百千万0-9]+章.*$`)
 
 type ComicService struct {
-	comicRepo   *repositories.ComicRepository
-	roleRepo    *repositories.RoleRepository
-	sectionRepo *repositories.SectionRepository
-	pageRepo    *repositories.PageRepository
-	storage     *storage.Storage
-	aigc        *gnxaigc.GnxAIGC
+	comicRepo      *repositories.ComicRepository
+	roleRepo       *repositories.RoleRepository
+	sectionRepo    *repositories.SectionRepository
+	pageRepo       *repositories.PageRepository
+	storage        *storage.Storage
+	aigc           *gnxaigc.GnxAIGC
+	sectionService *SectionService
 }
 
 func NewComicService(
@@ -42,6 +43,10 @@ func NewComicService(
 		storage:     storage,
 		aigc:        aigc,
 	}
+}
+
+func (s *ComicService) SetSectionService(sectionService *SectionService) {
+	s.sectionService = sectionService
 }
 
 func (s *ComicService) CreateComic(ctx context.Context, title, userPrompt string, file io.Reader) (*models.Comic, error) {
@@ -133,26 +138,6 @@ func (s *ComicService) processComicSync(ctx context.Context, comicID uint, conte
 		return fmt.Errorf("no chapters found in the novel")
 	}
 
-	for i, chapter := range chapters {
-		title := chapter.Title
-		if title == "" {
-			title = fmt.Sprintf("第%d章", i+1)
-		}
-
-		section := &models.ComicSection{
-			ComicID: comicID,
-			Title:   title,
-			Index:   i + 1,
-			Content: chapter.Content,
-			Status:  "pending",
-		}
-		if err := s.sectionRepo.Create(section); err != nil {
-			logger.Error("[Comic Processing] Failed to create section %d for comic ID=%d: %v", i+1, comicID, err)
-			continue
-		}
-		logger.Info("[Comic Processing] Created section %d: title=%s, ID=%d", i+1, title, section.ID)
-	}
-
 	comic.Status = "completed"
 	if err := s.comicRepo.Update(comic); err != nil {
 		logger.Error("[Comic Processing] Failed to update comic status: %v", err)
@@ -161,25 +146,18 @@ func (s *ComicService) processComicSync(ctx context.Context, comicID uint, conte
 	}
 
 	logger.Info("[Comic AI Processing] Starting AI processing for comic ID=%d", comicID)
-	go s.processComicAI(context.Background(), comicID)
+	go s.processComicAI(context.Background(), comicID, chapters)
 
 	return nil
 }
 
-func (s *ComicService) processComicAI(ctx context.Context, comicID uint) {
+func (s *ComicService) processComicAI(ctx context.Context, comicID uint, chapters []novelChapter) {
 	logger.Info("[Comic AI Processing] Loading comic data for ID=%d", comicID)
 	comic, err := s.comicRepo.FindByID(comicID)
 	if err != nil {
 		logger.Error("[Comic AI Processing] Failed to get comic %d: %v", comicID, err)
 		return
 	}
-
-	sections, err := s.sectionRepo.FindByComicID(comicID)
-	if err != nil || len(sections) == 0 {
-		logger.Error("[Comic AI Processing] Failed to get sections for comic %d: %v", comicID, err)
-		return
-	}
-	logger.Info("[Comic AI Processing] Found %d sections for comic ID=%d", len(sections), comicID)
 
 	logger.Info("[Comic AI Processing] Fetching available voice list for comic ID=%d", comicID)
 	voices, err := s.aigc.GetVoiceList(ctx)
@@ -196,12 +174,22 @@ func (s *ComicService) processComicAI(ctx context.Context, comicID uint) {
 		})
 	}
 
-	firstSection := sections[0]
-	logger.Info("[Comic AI Processing] Generating AI summary for first section (ID=%d) of comic ID=%d", firstSection.ID, comicID)
+	if len(chapters) == 0 {
+		logger.Error("[Comic AI Processing] No chapters to process for comic ID=%d", comicID)
+		return
+	}
+
+	firstChapter := chapters[0]
+	title := firstChapter.Title
+	if title == "" {
+		title = "第1章"
+	}
+
+	logger.Info("[Comic AI Processing] Generating AI summary for first chapter: %s", title)
 	summary, err := s.aigc.SummaryChapter(ctx, gnxaigc.SummaryChapterInput{
 		NovelTitle:           comic.Title,
-		ChapterTitle:         firstSection.Title,
-		Content:              firstSection.Content,
+		ChapterTitle:         title,
+		Content:              firstChapter.Content,
 		AvailableVoiceStyles: voiceItems,
 		CharacterFeatures:    []gnxaigc.CharacterFeature{},
 		MaxPanelsPerPage:     4,
@@ -231,61 +219,30 @@ func (s *ComicService) processComicAI(ctx context.Context, comicID uint) {
 		}
 	}
 
-	roles, err := s.roleRepo.FindByComicID(comicID)
-	if err != nil {
-		logger.Error("[Comic AI Processing] Failed to get roles for first section processing: %v", err)
-		roles = []models.ComicRole{}
-	}
-
-	logger.Info("[Comic AI Processing] Creating %d pages for first section (ID=%d)", len(summary.StoryboardPages), firstSection.ID)
-	for pageIndex, storyboardPage := range summary.StoryboardPages {
-		page := &models.ComicPage{
-			SectionID:   firstSection.ID,
-			Index:       pageIndex + 1,
-			ImagePrompt: storyboardPage.ImagePrompt,
-		}
-
-		if err := s.pageRepo.Create(page); err != nil {
-			logger.Error("[Comic AI Processing] Failed to create page %d: %v", pageIndex+1, err)
-			continue
-		}
-		logger.Info("[Comic AI Processing] Created page %d (ID=%d) with %d panels", pageIndex+1, page.ID, len(storyboardPage.Panels))
-
-		for panelIndex, panel := range storyboardPage.Panels {
-			for segmentIndex, segment := range panel.SourceTextSegments {
-				var roleID *uint
-				if len(segment.CharacterNames) > 0 {
-					for _, role := range roles {
-						if role.Name == segment.CharacterNames[0] {
-							roleID = &role.ID
-							break
-						}
-					}
-				}
-
-				detail := &models.ComicPageDetail{
-					PageID:  page.ID,
-					Index:   (panelIndex * 100) + segmentIndex,
-					Content: segment.Text,
-					RoleID:  roleID,
-				}
-
-				if err := s.pageRepo.CreateDetail(detail); err != nil {
-					logger.Error("[Comic AI Processing] Failed to create page detail: %v", err)
-				}
-			}
-		}
-	}
-
-	firstSection.Status = "completed"
-	if err := s.sectionRepo.Update(&firstSection); err != nil {
-		logger.Error("[Comic AI Processing] Failed to update first section status: %v", err)
-	} else {
-		logger.Info("[Comic AI Processing] First section (ID=%d) completed", firstSection.ID)
-	}
-
 	logger.Info("[Comic Image Processing] Starting image generation for comic ID=%d", comicID)
 	s.processComicImages(ctx, comicID)
+
+	logger.Info("[Comic AI Processing] Serially creating %d sections for comic ID=%d", len(chapters), comicID)
+	for i, chapter := range chapters {
+		title := chapter.Title
+		if title == "" {
+			title = fmt.Sprintf("第%d章", i+1)
+		}
+
+		logger.Info("[Comic AI Processing] Processing section %d/%d: %s", i+1, len(chapters), title)
+		if s.sectionService != nil {
+			_, err := s.sectionService.CreateSection(ctx, comicID, title, chapter.Content)
+			if err != nil {
+				logger.Error("[Comic AI Processing] Failed to create section %d (%s): %v", i+1, title, err)
+			} else {
+				logger.Info("[Comic AI Processing] Section %d/%d created successfully: %s", i+1, len(chapters), title)
+			}
+		} else {
+			logger.Error("[Comic AI Processing] SectionService not set, cannot create section %d", i+1)
+		}
+	}
+
+	logger.Info("[Comic AI Processing] All sections processed for comic ID=%d", comicID)
 }
 
 func (s *ComicService) processComicImages(ctx context.Context, comicID uint) {
