@@ -93,23 +93,10 @@ func (s *SectionService) GetStoryboards(comicID, sectionID uint) ([]models.Comic
 	return s.storyboardRepo.GetPagesBySectionID(sectionID)
 }
 
-func (s *SectionService) GetStoryboardImage(comicID, sectionID, storyboardID uint) ([]byte, error) {
-	section, err := s.sectionRepo.GetByID(sectionID)
-	if err != nil {
-		return nil, fmt.Errorf("section not found: %w", err)
-	}
-
-	if section.ComicID != comicID {
-		return nil, fmt.Errorf("section does not belong to comic")
-	}
-
+func (s *SectionService) GetStoryboardImage(storyboardID uint) ([]byte, error) {
 	panel, err := s.storyboardRepo.GetPanelByID(storyboardID)
 	if err != nil {
 		return nil, fmt.Errorf("storyboard panel not found: %w", err)
-	}
-
-	if panel.SectionID != sectionID {
-		return nil, fmt.Errorf("storyboard panel does not belong to section")
 	}
 
 	if panel.ImageURL == "" {
