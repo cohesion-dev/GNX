@@ -22,7 +22,7 @@ const ComicListMobile = () => {
     
     setLoading(true)
     try {
-      const response = await getComics({ page: pageNum, limit: 10 })
+      const response = await getComics({ page: pageNum, limit: 100 })
       if (response.code === 200) {
         const newComics = response.data.comics
         if (isRefresh) {
@@ -30,7 +30,7 @@ const ComicListMobile = () => {
         } else {
           setComics(prev => [...prev, ...newComics])
         }
-        setHasMore(newComics.length === 10)
+        setHasMore(newComics.length === 100)
       }
     } catch (error) {
       console.error('Failed to fetch comics:', error)
