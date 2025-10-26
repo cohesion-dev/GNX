@@ -28,3 +28,7 @@ func (r *RoleRepository) FindByID(id uint) (*models.ComicRole, error) {
 	err := r.db.First(&role, id).Error
 	return &role, err
 }
+
+func (r *RoleRepository) Update(role *models.ComicRole) error {
+	return r.db.Save(role).Error
+}

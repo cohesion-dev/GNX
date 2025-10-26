@@ -38,3 +38,7 @@ func (r *PageRepository) FindDetailByID(id uint) (*models.ComicPageDetail, error
 	err := r.db.First(&detail, id).Error
 	return &detail, err
 }
+
+func (r *PageRepository) Update(page *models.ComicPage) error {
+	return r.db.Save(page).Error
+}

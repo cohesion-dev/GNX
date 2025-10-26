@@ -8,7 +8,6 @@ import (
 	"github.com/cohesion-dev/GNX/backend_new/internal/models"
 	"github.com/cohesion-dev/GNX/backend_new/internal/repositories"
 	"github.com/cohesion-dev/GNX/backend_new/pkg/storage"
-	"github.com/google/uuid"
 )
 
 type SectionService struct {
@@ -61,7 +60,9 @@ func (s *SectionService) CreateSection(ctx context.Context, comicID uint, title,
 		return nil, fmt.Errorf("failed to create section: %w", err)
 	}
 
-	go s.processSection(context.Background(), comic, section)
+	if err := s.processSectionSync(ctx, comic, section); err != nil {
+		return nil, fmt.Errorf("failed to process section: %w", err)
+	}
 
 	return section, nil
 }
@@ -79,18 +80,118 @@ func (s *SectionService) GetSectionDetail(comicID, sectionID uint) (*models.Comi
 	return section, nil
 }
 
-func (s *SectionService) processSection(ctx context.Context, comic *models.Comic, section *models.ComicSection) {
+func (s *SectionService) processSectionSync(ctx context.Context, comic *models.Comic, section *models.ComicSection) error {
 	roles, err := s.roleRepo.FindByComicID(comic.ID)
 	if err != nil {
-		fmt.Printf("Failed to get roles for section %d: %v\n", section.ID, err)
 		s.updateSectionStatus(section.ID, "failed")
+		return fmt.Errorf("failed to get roles for section %d: %w", section.ID, err)
+	}
+
+	voices, err := s.aigc.GetVoiceList(ctx)
+	if err != nil {
+		s.updateSectionStatus(section.ID, "failed")
+		return fmt.Errorf("failed to get voice list for section %d: %w", section.ID, err)
+	}
+
+	voiceItems := make([]gnxaigc.TTSVoiceItem, 0, len(voices))
+	for _, v := range voices {
+		voiceItems = append(voiceItems, gnxaigc.TTSVoiceItem{
+			VoiceName: v.VoiceName,
+			VoiceType: v.VoiceType,
+		})
+	}
+
+	charFeatures := make([]gnxaigc.CharacterFeature, 0, len(roles))
+	for _, role := range roles {
+		charFeatures = append(charFeatures, gnxaigc.CharacterFeature{
+			Basic: gnxaigc.CharacterBasicProfile{
+				Name:   role.Name,
+				Gender: role.Gender,
+				Age:    role.Age,
+			},
+			TTS: gnxaigc.CharacterTTSProfile{
+				VoiceName:  role.VoiceName,
+				VoiceType:  role.VoiceType,
+				SpeedRatio: 1.0,
+			},
+			Comment: role.Brief,
+		})
+	}
+
+	summary, err := s.aigc.SummaryChapter(ctx, gnxaigc.SummaryChapterInput{
+		NovelTitle:           comic.Title,
+		ChapterTitle:         section.Title,
+		Content:              section.Content,
+		AvailableVoiceStyles: voiceItems,
+		CharacterFeatures:    charFeatures,
+		MaxPanelsPerPage:     4,
+	})
+	if err != nil {
+		s.updateSectionStatus(section.ID, "failed")
+		return fmt.Errorf("failed to generate summary for section %d: %w", section.ID, err)
+	}
+
+	for pageIndex, storyboardPage := range summary.StoryboardPages {
+		page := &models.ComicPage{
+			SectionID:   section.ID,
+			Index:       pageIndex + 1,
+			ImagePrompt: storyboardPage.ImagePrompt,
+		}
+
+		if err := s.pageRepo.Create(page); err != nil {
+			fmt.Printf("Failed to create page: %v\n", err)
+			continue
+		}
+
+		for panelIndex, panel := range storyboardPage.Panels {
+			for segmentIndex, segment := range panel.SourceTextSegments {
+				var roleID *uint
+				if len(segment.CharacterNames) > 0 {
+					for _, role := range roles {
+						if role.Name == segment.CharacterNames[0] {
+							roleID = &role.ID
+							break
+						}
+					}
+				}
+
+				detail := &models.ComicPageDetail{
+					PageID:  page.ID,
+					Index:   (panelIndex * 100) + segmentIndex,
+					Content: segment.Text,
+					RoleID:  roleID,
+				}
+
+				if err := s.pageRepo.CreateDetail(detail); err != nil {
+					fmt.Printf("Failed to create page detail: %v\n", err)
+				}
+			}
+		}
+	}
+
+	s.updateSectionStatus(section.ID, "completed")
+
+	go s.processSectionImages(context.Background(), comic, section.ID)
+
+	return nil
+}
+
+func (s *SectionService) processSectionImages(ctx context.Context, comic *models.Comic, sectionID uint) {
+	section, err := s.sectionRepo.FindByID(sectionID)
+	if err != nil {
+		fmt.Printf("Failed to get section %d for image processing: %v\n", sectionID, err)
+		return
+	}
+
+	roles, err := s.roleRepo.FindByComicID(comic.ID)
+	if err != nil {
+		fmt.Printf("Failed to get roles for section %d: %v\n", sectionID, err)
 		return
 	}
 
 	voices, err := s.aigc.GetVoiceList(ctx)
 	if err != nil {
-		fmt.Printf("Failed to get voice list for section %d: %v\n", section.ID, err)
-		s.updateSectionStatus(section.ID, "failed")
+		fmt.Printf("Failed to get voice list for section %d: %v\n", sectionID, err)
 		return
 	}
 
@@ -128,61 +229,35 @@ func (s *SectionService) processSection(ctx context.Context, comic *models.Comic
 		MaxPanelsPerPage:     4,
 	})
 	if err != nil {
-		fmt.Printf("Failed to generate summary for section %d: %v\n", section.ID, err)
-		s.updateSectionStatus(section.ID, "failed")
+		fmt.Printf("Failed to generate summary for section %d images: %v\n", sectionID, err)
+		return
+	}
+
+	pages, err := s.pageRepo.FindBySectionID(sectionID)
+	if err != nil {
+		fmt.Printf("Failed to get pages for section %d: %v\n", sectionID, err)
 		return
 	}
 
 	for pageIndex, storyboardPage := range summary.StoryboardPages {
-		page := &models.ComicPage{
-			SectionID:   section.ID,
-			Index:       pageIndex + 1,
-			ImagePrompt: storyboardPage.ImagePrompt,
+		if pageIndex >= len(pages) {
+			break
 		}
 
-		if err := s.pageRepo.Create(page); err != nil {
-			fmt.Printf("Failed to create page: %v\n", err)
-			continue
-		}
+		page := pages[pageIndex]
 
 		fullPrompt := gnxaigc.ComposePageImagePrompt(comic.UserPrompt, storyboardPage)
 		imageData, err := s.aigc.GenerateImageByText(ctx, fullPrompt)
 		if err != nil {
-			fmt.Printf("Failed to generate page image: %v\n", err)
-		} else {
-			imageID := uuid.New().String()
-			if err := s.storage.UploadBytes(imageData, imageID); err != nil {
-				fmt.Printf("Failed to upload page image: %v\n", err)
-			}
+			fmt.Printf("Failed to generate page image for page %d: %v\n", page.ID, err)
+			continue
 		}
 
-		for panelIndex, panel := range storyboardPage.Panels {
-			for segmentIndex, segment := range panel.SourceTextSegments {
-				var roleID *uint
-				if len(segment.CharacterNames) > 0 {
-					for _, role := range roles {
-						if role.Name == segment.CharacterNames[0] {
-							roleID = &role.ID
-							break
-						}
-					}
-				}
-
-				detail := &models.ComicPageDetail{
-					PageID:  page.ID,
-					Index:   (panelIndex * 100) + segmentIndex,
-					Content: segment.Text,
-					RoleID:  roleID,
-				}
-
-				if err := s.pageRepo.CreateDetail(detail); err != nil {
-					fmt.Printf("Failed to create page detail: %v\n", err)
-				}
-			}
+		imageID := fmt.Sprintf("%d", page.ID)
+		if err := s.storage.UploadBytes(imageData, imageID); err != nil {
+			fmt.Printf("Failed to upload page image for page %d: %v\n", page.ID, err)
 		}
 	}
-
-	s.updateSectionStatus(section.ID, "completed")
 }
 
 func (s *SectionService) updateSectionStatus(sectionID uint, status string) {

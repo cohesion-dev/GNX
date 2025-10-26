@@ -52,7 +52,9 @@ func (s *ComicService) CreateComic(ctx context.Context, title, userPrompt string
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	go s.processComic(context.Background(), comic.ID, string(content))
+	if err := s.processComicSync(ctx, comic.ID, string(content)); err != nil {
+		return nil, fmt.Errorf("failed to process comic: %w", err)
+	}
 
 	return comic, nil
 }
@@ -65,18 +67,16 @@ func (s *ComicService) GetComicDetail(id uint) (*models.Comic, error) {
 	return s.comicRepo.FindByID(id)
 }
 
-func (s *ComicService) processComic(ctx context.Context, comicID uint, content string) {
+func (s *ComicService) processComicSync(ctx context.Context, comicID uint, content string) error {
 	comic, err := s.comicRepo.FindByID(comicID)
 	if err != nil {
-		fmt.Printf("Failed to get comic %d: %v\n", comicID, err)
-		return
+		return fmt.Errorf("failed to get comic %d: %w", comicID, err)
 	}
 
 	voices, err := s.aigc.GetVoiceList(ctx)
 	if err != nil {
-		fmt.Printf("Failed to get voice list for comic %d: %v\n", comicID, err)
 		s.updateComicStatus(comicID, "failed")
-		return
+		return fmt.Errorf("failed to get voice list for comic %d: %w", comicID, err)
 	}
 
 	voiceItems := make([]gnxaigc.TTSVoiceItem, 0, len(voices))
@@ -96,9 +96,8 @@ func (s *ComicService) processComic(ctx context.Context, comicID uint, content s
 		MaxPanelsPerPage:     4,
 	})
 	if err != nil {
-		fmt.Printf("Failed to generate summary for comic %d: %v\n", comicID, err)
 		s.updateComicStatus(comicID, "failed")
-		return
+		return fmt.Errorf("failed to generate summary for comic %d: %w", comicID, err)
 	}
 
 	for _, charFeature := range summary.CharacterFeatures {
@@ -110,20 +109,6 @@ func (s *ComicService) processComic(ctx context.Context, comicID uint, content s
 			Age:       charFeature.Basic.Age,
 			VoiceName: charFeature.TTS.VoiceName,
 			VoiceType: charFeature.TTS.VoiceType,
-		}
-
-		if charFeature.ConceptArtPrompt != "" {
-			imageData, err := s.aigc.GenerateImageByText(ctx, charFeature.ConceptArtPrompt)
-			if err != nil {
-				fmt.Printf("Failed to generate role image: %v\n", err)
-			} else {
-				imageID := uuid.New().String()
-				if err := s.storage.UploadBytes(imageData, imageID); err != nil {
-					fmt.Printf("Failed to upload role image: %v\n", err)
-				} else {
-					role.ImageID = imageID
-				}
-			}
 		}
 
 		if err := s.roleRepo.Create(role); err != nil {
@@ -139,34 +124,81 @@ func (s *ComicService) processComic(ctx context.Context, comicID uint, content s
 		Status:  "pending",
 	}
 	if err := s.sectionRepo.Create(section); err != nil {
-		fmt.Printf("Failed to create section: %v\n", err)
 		s.updateComicStatus(comicID, "failed")
-		return
-	}
-
-	iconImageData, err := s.aigc.GenerateImageByText(ctx, fmt.Sprintf("Comic book cover for: %s, %s", comic.Title, comic.UserPrompt))
-	if err == nil {
-		iconImageID := uuid.New().String()
-		if err := s.storage.UploadBytes(iconImageData, iconImageID); err != nil {
-			fmt.Printf("Failed to upload icon image: %v\n", err)
-		} else {
-			comic.IconImageID = iconImageID
-		}
-	}
-
-	bgImageData, err := s.aigc.GenerateImageByText(ctx, fmt.Sprintf("Comic background scene for: %s, %s", comic.Title, comic.UserPrompt))
-	if err == nil {
-		bgImageID := uuid.New().String()
-		if err := s.storage.UploadBytes(bgImageData, bgImageID); err != nil {
-			fmt.Printf("Failed to upload background image: %v\n", err)
-		} else {
-			comic.BackgroundImageID = bgImageID
-		}
+		return fmt.Errorf("failed to create section: %w", err)
 	}
 
 	comic.Status = "completed"
 	if err := s.comicRepo.Update(comic); err != nil {
 		fmt.Printf("Failed to update comic status: %v\n", err)
+	}
+
+	go s.processComicImages(context.Background(), comicID)
+
+	return nil
+}
+
+func (s *ComicService) processComicImages(ctx context.Context, comicID uint) {
+	comic, err := s.comicRepo.FindByID(comicID)
+	if err != nil {
+		fmt.Printf("Failed to get comic %d for image processing: %v\n", comicID, err)
+		return
+	}
+
+	roles, err := s.roleRepo.FindByComicID(comicID)
+	if err != nil {
+		fmt.Printf("Failed to get roles for comic %d: %v\n", comicID, err)
+		return
+	}
+
+	for _, role := range roles {
+		if role.ImageID != "" {
+			continue
+		}
+
+		conceptArtPrompt := fmt.Sprintf("Character concept art for %s: %s", role.Name, role.Brief)
+		imageData, err := s.aigc.GenerateImageByText(ctx, conceptArtPrompt)
+		if err != nil {
+			fmt.Printf("Failed to generate role image for %s: %v\n", role.Name, err)
+			continue
+		}
+
+		imageID := uuid.New().String()
+		if err := s.storage.UploadBytes(imageData, imageID); err != nil {
+			fmt.Printf("Failed to upload role image for %s: %v\n", role.Name, err)
+			continue
+		}
+
+		role.ImageID = imageID
+		if err := s.roleRepo.Update(&role); err != nil {
+			fmt.Printf("Failed to update role image ID for %s: %v\n", role.Name, err)
+		}
+	}
+
+	if comic.IconImageID == "" {
+		iconImageData, err := s.aigc.GenerateImageByText(ctx, fmt.Sprintf("Comic book cover for: %s, %s", comic.Title, comic.UserPrompt))
+		if err == nil {
+			iconImageID := uuid.New().String()
+			if err := s.storage.UploadBytes(iconImageData, iconImageID); err != nil {
+				fmt.Printf("Failed to upload icon image: %v\n", err)
+			} else {
+				comic.IconImageID = iconImageID
+				s.comicRepo.Update(comic)
+			}
+		}
+	}
+
+	if comic.BackgroundImageID == "" {
+		bgImageData, err := s.aigc.GenerateImageByText(ctx, fmt.Sprintf("Comic background scene for: %s, %s", comic.Title, comic.UserPrompt))
+		if err == nil {
+			bgImageID := uuid.New().String()
+			if err := s.storage.UploadBytes(bgImageData, bgImageID); err != nil {
+				fmt.Printf("Failed to upload background image: %v\n", err)
+			} else {
+				comic.BackgroundImageID = bgImageID
+				s.comicRepo.Update(comic)
+			}
+		}
 	}
 }
 
