@@ -38,6 +38,7 @@ func NewApp() *App {
 	characterService := services.NewCharacterService(roleRepo, storageClient, aigcClient)
 	comicService := services.NewComicService(comicRepo, roleRepo, sectionRepo, pageRepo, storageClient, aigcClient)
 	sectionService := services.NewSectionService(comicRepo, roleRepo, sectionRepo, pageRepo, storageClient, aigcClient, characterService)
+	comicService.SetSectionService(sectionService)
 	imageService := services.NewImageService(storageClient)
 	ttsService := services.NewTTSService(pageRepo, roleRepo, aigcClient)
 
