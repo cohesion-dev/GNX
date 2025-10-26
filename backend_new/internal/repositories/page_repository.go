@@ -42,3 +42,7 @@ func (r *PageRepository) FindDetailByID(id uint) (*models.ComicPageDetail, error
 func (r *PageRepository) Update(page *models.ComicPage) error {
 	return r.db.Save(page).Error
 }
+
+func (r *PageRepository) UpdateDetail(detail *models.ComicPageDetail) error {
+	return r.db.Save(detail).Error
+}

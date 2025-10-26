@@ -8,6 +8,7 @@ type ComicPageDetail struct {
 	Index     int       `gorm:"not null" json:"index"`
 	Content   string    `gorm:"type:text;not null" json:"content"`
 	RoleID    *uint     `gorm:"index" json:"role_id,omitempty"`
+	AudioID   string    `gorm:"" json:"audio_id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 

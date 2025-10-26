@@ -261,8 +261,14 @@ func (s *SectionService) processSectionImages(ctx context.Context, comic *models
 			break
 		}
 
+		pageWithDetails, err := s.pageRepo.FindByID(pages[pageIndex].ID)
+		if err != nil {
+			fmt.Printf("  Failed to load page %d details: %v\n", pageIndex+1, err)
+			continue
+		}
+
 		wg.Add(1)
-		go func(pageIndex int, page models.ComicPage, storyboardPage gnxaigc.StoryboardPage) {
+		go func(pageIndex int, page *models.ComicPage, storyboardPage gnxaigc.StoryboardPage) {
 			defer wg.Done()
 
 			mu.Lock()
@@ -335,12 +341,77 @@ func (s *SectionService) processSectionImages(ctx context.Context, comic *models
 					fmt.Printf("    Error uploading image for page %d: %v\n", pageIndex+1, err)
 					mu.Unlock()
 				} else {
-					mu.Lock()
-					fmt.Printf("    Successfully uploaded image for page %d\n", pageIndex+1)
-					mu.Unlock()
+					page.ImageID = imageID
+					if err := s.pageRepo.Update(&page); err != nil {
+						mu.Lock()
+						fmt.Printf("    Error updating page %d with ImageID: %v\n", pageIndex+1, err)
+						mu.Unlock()
+					} else {
+						mu.Lock()
+						fmt.Printf("    Successfully uploaded and saved image for page %d\n", pageIndex+1)
+						mu.Unlock()
+					}
 				}
 			}
-		}(pageIndex, pages[pageIndex], storyboardPage)
+
+			var audioWg sync.WaitGroup
+			detailIdx := 0
+			for panelIdx, panel := range storyboardPage.Panels {
+				segmentCount := len(panel.SourceTextSegments)
+
+				for segIdx, segment := range panel.SourceTextSegments {
+					if detailIdx >= len(page.Details) {
+						break
+					}
+
+					audioWg.Add(1)
+
+					go func(panelIndex, audioIndex, totalSegments int, audioSegment gnxaigc.SourceTextSegment, detail *models.ComicPageDetail) {
+						defer audioWg.Done()
+
+						mu.Lock()
+						fmt.Printf("  [Page %d/%d] Panel %d audio %d/%d...\n", pageIndex+1, totalPages, panelIndex+1, audioIndex+1, totalSegments)
+						mu.Unlock()
+
+						audioData, err := s.aigc.TextToSpeechSimple(
+							ctx,
+							audioSegment.Text,
+							audioSegment.VoiceType,
+							audioSegment.SpeedRatio,
+						)
+						if err != nil {
+							mu.Lock()
+							fmt.Printf("    Error generating audio for page %d panel %d segment %d: %v\n", pageIndex+1, panelIndex+1, audioIndex+1, err)
+							mu.Unlock()
+							return
+						}
+
+						audioID := fmt.Sprintf("page_%d_panel_%d_audio_%d", page.ID, panelIndex+1, audioIndex+1)
+						if err := s.storage.UploadBytes(audioData, audioID); err != nil {
+							mu.Lock()
+							fmt.Printf("    Error uploading audio for page %d panel %d segment %d: %v\n", pageIndex+1, panelIndex+1, audioIndex+1, err)
+							mu.Unlock()
+							return
+						}
+
+						detail.AudioID = audioID
+						if err := s.pageRepo.UpdateDetail(detail); err != nil {
+							mu.Lock()
+							fmt.Printf("    Error updating detail with AudioID: %v\n", err)
+							mu.Unlock()
+						} else {
+							mu.Lock()
+							fmt.Printf("    Saved audio to %s\n", audioID)
+							mu.Unlock()
+						}
+					}(panelIdx, segIdx, segmentCount, segment, &page.Details[detailIdx])
+
+					detailIdx++
+				}
+			}
+
+			audioWg.Wait()
+		}(pageIndex, pageWithDetails, storyboardPage)
 	}
 
 	wg.Wait()

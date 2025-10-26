@@ -7,6 +7,7 @@ type ComicPage struct {
 	SectionID   uint      `gorm:"not null;index" json:"section_id"`
 	Index       int       `gorm:"not null" json:"index"`
 	ImagePrompt string    `gorm:"type:text" json:"-"`
+	ImageID     string    `gorm:"" json:"image_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 
