@@ -32,7 +32,9 @@ func (s *TTSService) GetTTSAudio(ctx context.Context, detailID uint) ([]byte, er
 		return nil, fmt.Errorf("detail not found: %w", err)
 	}
 
-	voiceType := "narrator"
+	fmt.Printf("Generating TTS for detail ID %d with content: %s\n", detailID, detail.Content)
+
+	voiceType := "qiniu_zh_male_whxkxg"
 	speedRatio := 1.0
 
 	if detail.RoleID != nil {

@@ -37,7 +37,6 @@ func (s *Storage) UploadBytes(data []byte, key string) error {
 	upToken := putPolicy.UploadToken(s.mac)
 
 	cfg := storage.Config{
-		Zone:          &storage.ZoneHuadong,
 		UseCdnDomains: false,
 		UseHTTPS:      true,
 	}
