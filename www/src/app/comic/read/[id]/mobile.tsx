@@ -15,31 +15,45 @@ const ComicReadMobile = observer(() => {
   const store = useMemo(() => new ComicReadStore(), [])
 
   useEffect(() => {
+    let isCancelled = false
+
     const initializeStore = async () => {
       if (!params?.id || !sectionIndex) return
-      
+
       try {
         const response = await getComic(params.id)
+        if (isCancelled) return
+
         if (response.code === 200 && response.data.sections) {
           const section = response.data.sections.find(
             s => s.index === parseInt(sectionIndex)
           )
-          
-          if (section) {
+
+          if (section && !isCancelled) {
             await store.initialize(params.id, section.id)
           }
         }
       } catch (error) {
-        console.error('Failed to initialize comic reader:', error)
+        if (!isCancelled) {
+          console.error('Failed to initialize comic reader:', error)
+        }
       }
     }
-    
+
     initializeStore()
-    
+
+    return () => {
+      isCancelled = true
+      // 只在组件真正卸载时才 dispose
+    }
+  }, [params?.id, sectionIndex, store])
+
+  // 在组件卸载时清理 store
+  useEffect(() => {
     return () => {
       store.dispose()
     }
-  }, [params?.id, sectionIndex, store])
+  }, [store])
 
   const handleBackClick = () => {
     router.push(`/comic/detail/${params?.id}`)
@@ -115,7 +129,7 @@ const ComicReadMobile = observer(() => {
               onClick={() => store.handlePlayButtonClick()}
               className="w-32 h-32 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors cursor-pointer"
             >
-              <div className="w-0 h-0 border-l-[24px] border-l-white border-t-[16px] border-t-transparent border-b-[16px] border-b-transparent ml-2"></div>
+              <div className="w-0 h-0 border-l-24 border-l-white border-t-16 border-t-transparent border-b-16 border-b-transparent ml-2"></div>
             </button>
           </div>
 
