@@ -3,82 +3,51 @@ package services
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"time"
 
 	"github.com/cohesion-dev/GNX/ai/gnxaigc"
-	"github.com/cohesion-dev/GNX/backend/internal/repositories"
-	"github.com/cohesion-dev/GNX/backend/pkg/storage"
+	"github.com/cohesion-dev/GNX/backend_new/internal/repositories"
 )
 
 type TTSService struct {
-	storyboardRepo *repositories.StoryboardRepository
-	aigcService    *gnxaigc.GnxAIGC
-	storageService *storage.QiniuClient
+	pageRepo *repositories.PageRepository
+	roleRepo *repositories.RoleRepository
+	aigc     *gnxaigc.GnxAIGC
 }
 
 func NewTTSService(
-	storyboardRepo *repositories.StoryboardRepository,
-	aigcService *gnxaigc.GnxAIGC,
-	storageService *storage.QiniuClient,
+	pageRepo *repositories.PageRepository,
+	roleRepo *repositories.RoleRepository,
+	aigc *gnxaigc.GnxAIGC,
 ) *TTSService {
 	return &TTSService{
-		storyboardRepo: storyboardRepo,
-		aigcService:    aigcService,
-		storageService: storageService,
+		pageRepo: pageRepo,
+		roleRepo: roleRepo,
+		aigc:     aigc,
 	}
 }
 
-func (s *TTSService) GetTTSAudio(segmentID uint) ([]byte, error) {
-	segment, err := s.storyboardRepo.GetSegmentByID(segmentID)
+func (s *TTSService) GetTTSAudio(ctx context.Context, detailID uint) ([]byte, error) {
+	detail, err := s.pageRepo.FindDetailByID(detailID)
 	if err != nil {
-		return nil, fmt.Errorf("TTS segment not found: %w", err)
+		return nil, fmt.Errorf("detail not found: %w", err)
 	}
 
-	if segment.TTSUrl != "" {
-		resp, err := http.Get(segment.TTSUrl)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch cached audio: %w", err)
-		}
-		defer resp.Body.Close()
+	fmt.Printf("Generating TTS for detail ID %d with content: %s\n", detailID, detail.Content)
 
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("failed to fetch cached audio: status %d", resp.StatusCode)
-		}
+	voiceType := "qiniu_zh_male_whxkxg"
+	speedRatio := 1.0
 
-		audioData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read cached audio: %w", err)
+	if detail.RoleID != nil {
+		role, err := s.roleRepo.FindByID(*detail.RoleID)
+		if err == nil {
+			voiceType = role.VoiceType
 		}
-
-		return audioData, nil
 	}
 
-	if segment.Role == nil {
-		return nil, fmt.Errorf("segment has no associated role for TTS")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	audioData, err := s.aigcService.TextToSpeechSimple(ctx, segment.Text, segment.Role.VoiceType, segment.Role.SpeedRatio)
+	audioData, err := s.aigc.TextToSpeechSimple(ctx, detail.Content, voiceType, speedRatio)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate TTS audio: %w", err)
+		return nil, fmt.Errorf("failed to generate TTS: %w", err)
 	}
-
-	go s.uploadAndSaveURL(segmentID, audioData)
 
 	return audioData, nil
-}
-
-func (s *TTSService) uploadAndSaveURL(segmentID uint, audioData []byte) {
-	key := fmt.Sprintf("tts/%d_%d.mp3", segmentID, time.Now().Unix())
-
-	url, err := s.storageService.UploadAudio(key, audioData)
-	if err != nil {
-		return
-	}
-
-	_ = s.storyboardRepo.UpdateSegmentTTSURL(segmentID, url)
 }

@@ -1,5 +1,0 @@
-.env
-config/config.yaml
-*.log
-tmp/
-vendor/

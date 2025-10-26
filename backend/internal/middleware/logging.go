@@ -1,13 +1,13 @@
 package middleware
 
 import (
-	"log"
+	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-func Logging() gin.HandlerFunc {
+func Logger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
 
@@ -15,12 +15,15 @@ func Logging() gin.HandlerFunc {
 
 		endTime := time.Now()
 		latency := endTime.Sub(startTime)
-		statusCode := c.Writer.Status()
 
-		log.Printf("[%s] %s %s %d %v",
-			c.Request.Method,
-			c.Request.RequestURI,
-			c.ClientIP(),
+		statusCode := c.Writer.Status()
+		method := c.Request.Method
+		path := c.Request.URL.Path
+
+		fmt.Printf("[%s] %s %s %d %v\n",
+			startTime.Format("2006-01-02 15:04:05"),
+			method,
+			path,
 			statusCode,
 			latency,
 		)
