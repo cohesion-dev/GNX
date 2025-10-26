@@ -10,7 +10,7 @@ type ComicPage struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 
-	Section ComicSection     `gorm:"foreignKey:SectionID" json:"-"`
+	Section ComicSection      `gorm:"foreignKey:SectionID" json:"-"`
 	Details []ComicPageDetail `gorm:"foreignKey:PageID;orderBy:index" json:"details,omitempty"`
 }
 

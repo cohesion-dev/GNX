@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cohesion-dev/GNX/backend_new/internal/models"
 	"github.com/cohesion-dev/GNX/backend_new/internal/services"
 	"github.com/cohesion-dev/GNX/backend_new/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -89,5 +90,17 @@ func (h *ComicHandler) GetComicDetail(c *gin.Context) {
 		return
 	}
 
-	utils.SuccessResponse(c, comic)
+	response := models.ComicDetailResponse{
+		ID:                strconv.FormatUint(uint64(comic.ID), 10),
+		Title:             comic.Title,
+		IconImageID:       comic.IconImageID,
+		BackgroundImageID: comic.BackgroundImageID,
+		Status:            comic.Status,
+		Roles:             comic.Roles,
+		Sections:          comic.Sections,
+		CreatedAt:         comic.CreatedAt,
+		UpdatedAt:         comic.UpdatedAt,
+	}
+
+	utils.SuccessResponse(c, response)
 }

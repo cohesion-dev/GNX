@@ -19,3 +19,15 @@ type Comic struct {
 func (Comic) TableName() string {
 	return "comics"
 }
+
+type ComicDetailResponse struct {
+	ID                string         `json:"id"`
+	Title             string         `json:"title"`
+	IconImageID       string         `json:"icon_image_id"`
+	BackgroundImageID string         `json:"background_image_id"`
+	Status            string         `json:"status"`
+	Roles             []ComicRole    `json:"roles,omitempty"`
+	Sections          []ComicSection `json:"sections,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+}
