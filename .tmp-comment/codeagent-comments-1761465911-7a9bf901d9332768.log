@@ -1,0 +1,14 @@
+# Historical Comments and Reviews
+
+## Discussion Comments
+
+**@YangSen-qn** (Oct 26, 08:05)
+@xgopilot backend 中的 services 不要搞那么多的 service, 把 ComicService、SectionService、CharacterService 合并成一个 ComicService 服务，对外的服务方法可以不变，只是调整方法归属为ComicService
+
+---
+
+**@xgopilot** (Oct 26, 08:05)
+codeagent is processing your request, please wait a moment...
+
+---
+

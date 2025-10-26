@@ -11,12 +11,12 @@ import (
 )
 
 type SectionHandler struct {
-	sectionService *services.SectionService
+	comicService *services.ComicService
 }
 
-func NewSectionHandler(sectionService *services.SectionService) *SectionHandler {
+func NewSectionHandler(comicService *services.ComicService) *SectionHandler {
 	return &SectionHandler{
-		sectionService: sectionService,
+		comicService: comicService,
 	}
 }
 
@@ -33,7 +33,7 @@ func (h *SectionHandler) GetSectionContent(c *gin.Context) {
 		return
 	}
 
-	content, err := h.sectionService.GetSectionContent(uint(comicID), uint(sectionID))
+	content, err := h.comicService.GetSectionContent(uint(comicID), uint(sectionID))
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusNotFound, "Section not found", err.Error())
 		return
@@ -55,7 +55,7 @@ func (h *SectionHandler) GetStoryboards(c *gin.Context) {
 		return
 	}
 
-	storyboards, err := h.sectionService.GetStoryboards(uint(comicID), uint(sectionID))
+	storyboards, err := h.comicService.GetStoryboards(uint(comicID), uint(sectionID))
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "Failed to get storyboards", err.Error())
 		return
@@ -71,7 +71,7 @@ func (h *SectionHandler) GetPanelImage(c *gin.Context) {
 		return
 	}
 
-	imageData, err := h.sectionService.GetPanelImage(uint(panelID))
+	imageData, err := h.comicService.GetPanelImage(uint(panelID))
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusNotFound, "Image not found", err.Error())
 		return
