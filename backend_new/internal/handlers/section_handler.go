@@ -10,11 +10,11 @@ import (
 )
 
 type SectionHandler struct {
-	sectionService *services.SectionService
+	comicService *services.ComicService
 }
 
-func NewSectionHandler(sectionService *services.SectionService) *SectionHandler {
-	return &SectionHandler{sectionService: sectionService}
+func NewSectionHandler(comicService *services.ComicService) *SectionHandler {
+	return &SectionHandler{comicService: comicService}
 }
 
 func (h *SectionHandler) CreateSection(c *gin.Context) {
@@ -32,7 +32,7 @@ func (h *SectionHandler) CreateSection(c *gin.Context) {
 		return
 	}
 
-	section, err := h.sectionService.CreateSection(c.Request.Context(), uint(comicID), title, content)
+	section, err := h.comicService.CreateSection(c.Request.Context(), uint(comicID), title, content)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
@@ -57,7 +57,7 @@ func (h *SectionHandler) GetSectionDetail(c *gin.Context) {
 		return
 	}
 
-	section, err := h.sectionService.GetSectionDetail(uint(comicID), uint(sectionID))
+	section, err := h.comicService.GetSectionDetail(uint(comicID), uint(sectionID))
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusNotFound, "Not Found", err.Error())
 		return

@@ -35,15 +35,12 @@ func NewApp() *App {
 	sectionRepo := repositories.NewSectionRepository(db)
 	pageRepo := repositories.NewPageRepository(db)
 
-	characterService := services.NewCharacterService(roleRepo, storageClient, aigcClient)
 	comicService := services.NewComicService(comicRepo, roleRepo, sectionRepo, pageRepo, storageClient, aigcClient)
-	sectionService := services.NewSectionService(comicRepo, roleRepo, sectionRepo, pageRepo, storageClient, aigcClient, characterService)
-	comicService.SetSectionService(sectionService)
 	imageService := services.NewImageService(storageClient)
 	ttsService := services.NewTTSService(pageRepo, roleRepo, aigcClient)
 
 	comicHandler := handlers.NewComicHandler(comicService)
-	sectionHandler := handlers.NewSectionHandler(sectionService)
+	sectionHandler := handlers.NewSectionHandler(comicService)
 	imageHandler := handlers.NewImageHandler(imageService)
 	ttsHandler := handlers.NewTTSHandler(ttsService)
 

@@ -59,19 +59,10 @@ func NewServer(db *gorm.DB, cfg *config.Config) *Server {
 		db,
 	)
 
-	sectionService := services.NewSectionService(
-		sectionRepo,
-		storyboardRepo,
-		roleRepo,
-		comicRepo,
-		storageService,
-		db,
-	)
-
 	ttsService := services.NewTTSService(storyboardRepo, aigcService, storageService)
 
 	comicHandler := handlers.NewComicHandler(comicService)
-	sectionHandler := handlers.NewSectionHandler(sectionService)
+	sectionHandler := handlers.NewSectionHandler(comicService)
 	ttsHandler := handlers.NewTTSHandler(ttsService)
 
 	server := &Server{
