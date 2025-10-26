@@ -129,6 +129,21 @@ func (s *ComicService) processComicGeneration(comicID uint, content []byte) {
 		return
 	}
 
+	ctx := context.Background()
+	metadata, err := s.aigcService.GenerateComicMetadata(ctx, gnxaigc.ComicMetadataInput{
+		NovelTitle:   comic.Title,
+		NovelContent: string(content),
+		UserPrompt:   comic.UserPrompt,
+	})
+	if err == nil {
+		updates := map[string]interface{}{
+			"brief":       metadata.Brief,
+			"icon_prompt": metadata.IconPrompt,
+			"bg_prompt":   metadata.BgPrompt,
+		}
+		s.comicRepo.UpdateComicInfo(comicID, updates)
+	}
+
 	sections := utils.ParseNovelSections(string(content))
 
 	for _, section := range sections {
