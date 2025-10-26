@@ -20,6 +20,7 @@ type ComicService struct {
 	comicRepo   *repositories.ComicRepository
 	roleRepo    *repositories.RoleRepository
 	sectionRepo *repositories.SectionRepository
+	pageRepo    *repositories.PageRepository
 	storage     *storage.Storage
 	aigc        *gnxaigc.GnxAIGC
 }
@@ -28,6 +29,7 @@ func NewComicService(
 	comicRepo *repositories.ComicRepository,
 	roleRepo *repositories.RoleRepository,
 	sectionRepo *repositories.SectionRepository,
+	pageRepo *repositories.PageRepository,
 	storage *storage.Storage,
 	aigc *gnxaigc.GnxAIGC,
 ) *ComicService {
@@ -35,6 +37,7 @@ func NewComicService(
 		comicRepo:   comicRepo,
 		roleRepo:    roleRepo,
 		sectionRepo: sectionRepo,
+		pageRepo:    pageRepo,
 		storage:     storage,
 		aigc:        aigc,
 	}
@@ -204,6 +207,55 @@ func (s *ComicService) processComicAI(ctx context.Context, comicID uint) {
 		if err := s.roleRepo.Create(role); err != nil {
 			fmt.Printf("Failed to create role: %v\n", err)
 		}
+	}
+
+	roles, err := s.roleRepo.FindByComicID(comicID)
+	if err != nil {
+		fmt.Printf("Failed to get roles for first section processing: %v\n", err)
+		roles = []models.ComicRole{}
+	}
+
+	for pageIndex, storyboardPage := range summary.StoryboardPages {
+		page := &models.ComicPage{
+			SectionID:   firstSection.ID,
+			Index:       pageIndex + 1,
+			ImagePrompt: storyboardPage.ImagePrompt,
+		}
+
+		if err := s.pageRepo.Create(page); err != nil {
+			fmt.Printf("Failed to create page: %v\n", err)
+			continue
+		}
+
+		for panelIndex, panel := range storyboardPage.Panels {
+			for segmentIndex, segment := range panel.SourceTextSegments {
+				var roleID *uint
+				if len(segment.CharacterNames) > 0 {
+					for _, role := range roles {
+						if role.Name == segment.CharacterNames[0] {
+							roleID = &role.ID
+							break
+						}
+					}
+				}
+
+				detail := &models.ComicPageDetail{
+					PageID:  page.ID,
+					Index:   (panelIndex * 100) + segmentIndex,
+					Content: segment.Text,
+					RoleID:  roleID,
+				}
+
+				if err := s.pageRepo.CreateDetail(detail); err != nil {
+					fmt.Printf("Failed to create page detail: %v\n", err)
+				}
+			}
+		}
+	}
+
+	firstSection.Status = "completed"
+	if err := s.sectionRepo.Update(&firstSection); err != nil {
+		fmt.Printf("Failed to update first section status: %v\n", err)
 	}
 
 	s.processComicImages(ctx, comicID)

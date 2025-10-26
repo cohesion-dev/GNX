@@ -35,7 +35,7 @@ func NewApp() *App {
 	sectionRepo := repositories.NewSectionRepository(db)
 	pageRepo := repositories.NewPageRepository(db)
 
-	comicService := services.NewComicService(comicRepo, roleRepo, sectionRepo, storageClient, aigcClient)
+	comicService := services.NewComicService(comicRepo, roleRepo, sectionRepo, pageRepo, storageClient, aigcClient)
 	sectionService := services.NewSectionService(comicRepo, roleRepo, sectionRepo, pageRepo, storageClient, aigcClient)
 	imageService := services.NewImageService(storageClient)
 	ttsService := services.NewTTSService(pageRepo, roleRepo, aigcClient)
