@@ -205,6 +205,59 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /comic/{id}/sections:
+    post:
+      tags:
+        - 章节管理
+      summary: 追加章节
+      description: 通过上传小说文件追加更多章节到指定漫画
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 漫画ID
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 小说续章文件
+      responses:
+        '200':
+          description: 成功开始追加章节
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: "success"
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Sections appending started"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /comic/{id}/section:
     post:
       tags:
@@ -335,7 +388,7 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/ComicStoryboard'
+                      $ref: '#/components/schemas/ComicStoryboardPage'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -422,9 +475,18 @@ components:
         icon:
           type: string
           example: "https://example.com/icon.jpg"
+        icon_prompt:
+          type: string
+          example: "温馨校园风格的封面图"
         bg:
           type: string
           example: "https://example.com/bg.jpg"
+        bg_prompt:
+          type: string
+          example: "樱花盛开的校园背景"
+        novel_file_url:
+          type: string
+          example: "https://example.com/novel.txt"
         user_prompt:
           type: string
           example: "请生成一个温馨的校园恋爱故事"
@@ -432,6 +494,9 @@ components:
           type: string
           enum: [pending, completed, failed]
           example: "completed"
+        has_more_content:
+          type: boolean
+          example: true
         created_at:
           type: string
           format: date-time
@@ -467,15 +532,40 @@ components:
         name:
           type: string
           example: "小明"
+        gender:
+          type: string
+          example: "male"
+        age:
+          type: string
+          example: "17岁"
         image_url:
           type: string
           example: "https://example.com/role1.jpg"
         brief:
           type: string
           example: "一个阳光开朗的男孩"
-        voice:
+        hair:
+          type: string
+          example: "短发，黑色"
+        habitual_expr:
+          type: string
+          example: "经常微笑"
+        skin_tone:
+          type: string
+          example: "健康肤色"
+        face_shape:
+          type: string
+          example: "圆脸"
+        voice_name:
+          type: string
+          example: "zh-CN-YunxiNeural"
+        voice_type:
           type: string
           example: "male_young"
+        speed_ratio:
+          type: number
+          format: float
+          example: 1.0
         created_at:
           type: string
           format: date-time
@@ -497,6 +587,9 @@ components:
         index:
           type: integer
           example: 1
+        title:
+          type: string
+          example: "第一章"
         detail:
           type: string
           example: "这是第一章的内容..."
@@ -513,8 +606,9 @@ components:
           format: date-time
           example: "2024-01-01T00:00:00Z"
 
-    ComicStoryboard:
+    ComicStoryboardPage:
       type: object
+      description: 漫画分镜页面（一页包含多个面板）
       properties:
         id:
           type: integer
@@ -522,12 +616,22 @@ components:
         section_id:
           type: integer
           example: 1
+        index:
+          type: integer
+          example: 0
         image_prompt:
           type: string
           example: "一个阳光明媚的校园场景"
-        image_url:
+        layout_hint:
           type: string
-          example: "https://example.com/storyboard1.jpg"
+          example: "上下布局，上方是全景，下方是特写"
+        page_summary:
+          type: string
+          example: "主角在校园中遇见女主角"
+        status:
+          type: string
+          enum: [pending, completed, failed]
+          example: "completed"
         created_at:
           type: string
           format: date-time
@@ -536,29 +640,81 @@ components:
           type: string
           format: date-time
           example: "2024-01-01T00:00:00Z"
-        details:
+        panels:
           type: array
           items:
-            $ref: '#/components/schemas/ComicStoryboardDetail'
+            $ref: '#/components/schemas/ComicStoryboardPanel'
 
-    ComicStoryboardDetail:
+    ComicStoryboardPanel:
       type: object
+      description: 漫画分镜面板（一个面板包含一个画面和相关文本）
       properties:
         id:
           type: integer
           example: 1
-        storyboard_id:
+        section_id:
           type: integer
           example: 1
-        detail:
+        page_id:
+          type: integer
+          example: 1
+        index:
+          type: integer
+          example: 0
+        visual_prompt:
+          type: string
+          example: "阳光明媚的校园操场，两个学生在交谈"
+        panel_summary:
+          type: string
+          example: "小明和小红第一次见面"
+        image_url:
+          type: string
+          example: "https://example.com/panel1.jpg"
+        status:
+          type: string
+          enum: [pending, completed, failed]
+          example: "completed"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-01-01T00:00:00Z"
+        source_text_segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComicStoryboardSegment'
+
+    ComicStoryboardSegment:
+      type: object
+      description: 漫画文本片段（对话或旁白）
+      properties:
+        id:
+          type: integer
+          example: 1
+        panel_id:
+          type: integer
+          example: 1
+        index:
+          type: integer
+          example: 0
+        text:
           type: string
           example: "你好，我是小明"
-        role_id:
-          type: integer
-          example: 1
+        character_refs:
+          type: array
+          items:
+            type: string
+          example: ["小明"]
         tts_url:
           type: string
           example: "https://example.com/tts1.mp3"
+        role_id:
+          type: integer
+          nullable: true
+          example: 1
         created_at:
           type: string
           format: date-time
@@ -573,10 +729,10 @@ components:
       properties:
         section:
           $ref: '#/components/schemas/ComicSection'
-        storyboards:
+        pages:
           type: array
           items:
-            $ref: '#/components/schemas/ComicStoryboard'
+            $ref: '#/components/schemas/ComicStoryboardPage'
 
     Error:
       type: object
