@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { getComics, type Comic } from '@/apis/comic'
+import { getComics, type Comic } from '@/apis'
 
 const ComicListMobile = () => {
   const router = useRouter()
@@ -11,7 +11,7 @@ const ComicListMobile = () => {
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [shakeId, setShakeId] = useState<number | null>(null)
+  const [shakeId, setShakeId] = useState<string | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
   const pullDistance = useRef(0)
@@ -179,12 +179,12 @@ const ComicListMobile = () => {
       )}
 
       <div className="fixed top-0 left-0 right-0 bg-slate-900/20 backdrop-blur-lg z-40">
-        <div className="px-6 pb-3 text-center flex items-center justify-center" style={{ paddingTop: '16px' }}>
+        <div className="px-6 text-center flex items-center justify-center" style={{ paddingTop: '20px', paddingBottom: '20px' }}>
           <h1 className="text-xl font-bold">欢迎回家..</h1>
         </div>
       </div>
 
-      <div className="px-6 mt-20 space-y-4 pb-24">
+      <div className="px-6 space-y-4 pb-24" style={{ marginTop: '100px' }}>
         {comics.map((comic) => (
           <div
             key={comic.id}
@@ -200,11 +200,7 @@ const ComicListMobile = () => {
           >
             <div className="flex gap-4 items-center">
               <div className="w-16 h-16 flex items-center justify-center bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-full overflow-hidden flex-shrink-0">
-                {comic.icon ? (
-                  <img src={comic.icon} alt={comic.title} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-3xl">📚</span>
-                )}
+                <span className="text-3xl">📚</span>
               </div>
 
               <div className="flex-1 min-w-0">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { getComics, createComic } from '@/apis/comic'
+import { getComics, createComic } from '@/apis'
 
 const ComicAddMobile = () => {
   const router = useRouter()
@@ -53,11 +53,11 @@ const ComicAddMobile = () => {
 
     setSubmitting(true)
     try {
-      const response = await createComic({
-        title: title.trim(),
-        user_prompt: userPrompt.trim(),
+      const response = await createComic(
+        title.trim(),
+        userPrompt.trim(),
         file
-      })
+      )
 
       if (response.code === 200) {
         router.push(`/comic/read/${response.data.id}?section-index=1`)

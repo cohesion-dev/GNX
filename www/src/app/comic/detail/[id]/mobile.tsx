@@ -2,16 +2,16 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { getComic, type ComicDetail, type ComicSection } from '@/apis/comic'
+import { getComic, type ComicDetail, type Section } from '@/apis'
 
 const ComicDetailMobile = () => {
   const router = useRouter()
   const params = useParams<{ id: string }>()
   const [comic, setComic] = useState<ComicDetail | null>(null)
-  const [sections, setSections] = useState<ComicSection[]>([])
+  const [sections, setSections] = useState<Section[]>([])
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [shakeId, setShakeId] = useState<number | null>(null)
+  const [shakeId, setShakeId] = useState<string | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
   const pullDistance = useRef(0)
@@ -21,7 +21,7 @@ const ComicDetailMobile = () => {
     
     setLoading(true)
     try {
-      const comicResponse = await getComic(Number(params.id))
+      const comicResponse = await getComic(params.id)
       
       if (comicResponse.code === 200) {
         setComic(comicResponse.data)
@@ -73,7 +73,7 @@ const ComicDetailMobile = () => {
     router.push('/comic')
   }, [router])
 
-  const handleSectionClick = useCallback((section: ComicSection) => {
+  const handleSectionClick = useCallback((section: Section) => {
     if (section.status === 'completed' && params?.id) {
       router.push(`/comic/read/${params.id}?section-index=${section.index}`)
     } else {
@@ -152,13 +152,9 @@ const ComicDetailMobile = () => {
           <div className="bg-white/10 backdrop-blur-md rounded-3xl p-4 mb-6">
             <div className="flex gap-4">
               <div className="w-24 h-32 flex-shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600">
-                {comic.icon ? (
-                  <img src={comic.icon} alt={comic.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-4xl">📚</span>
-                  </div>
-                )}
+                <div className="w-full h-full flex items-center justify-center">
+                  <span className="text-4xl">📚</span>
+                </div>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-gray-300 text-sm line-clamp-5">
@@ -187,7 +183,7 @@ const ComicDetailMobile = () => {
                 <div className="flex-1">
                   <h3 className="text-base">
                     <span className="text-cyan-400">第 {section.index} 章</span>
-                    {section.detail && <span className="text-white ml-3">{section.detail}</span>}
+                    <span className="text-white ml-3">{section.title}</span>
                   </h3>
                 </div>
                 {section.status === 'pending' && (
