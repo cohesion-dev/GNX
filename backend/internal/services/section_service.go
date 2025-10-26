@@ -39,26 +39,6 @@ func NewSectionService(
 	}
 }
 
-func (s *SectionService) CreateSection(comicID uint, index int, detail string) (*models.ComicSection, error) {
-	_, err := s.comicRepo.GetByID(comicID)
-	if err != nil {
-		return nil, fmt.Errorf("comic not found: %w", err)
-	}
-
-	section := &models.ComicSection{
-		ComicID: comicID,
-		Index:   index,
-		Detail:  detail,
-		Status:  "pending",
-	}
-
-	if err := s.sectionRepo.Create(section); err != nil {
-		return nil, fmt.Errorf("failed to create section: %w", err)
-	}
-
-	return section, nil
-}
-
 func (s *SectionService) GetSectionContent(comicID, sectionID uint) (map[string]interface{}, error) {
 	section, err := s.sectionRepo.GetByID(sectionID)
 	if err != nil {

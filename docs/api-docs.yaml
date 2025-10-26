@@ -258,60 +258,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /comic/{id}/section:
-    post:
-      tags:
-        - 章节管理
-      summary: 创建新章节
-      description: 为指定漫画创建新章节
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: 漫画ID
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - index
-                - detail
-              properties:
-                index:
-                  type: integer
-                  description: 章节序号
-                  example: 1
-                detail:
-                  type: string
-                  description: 章节内容
-                  example: "这是新章节的内容..."
-      responses:
-        '201':
-          description: 成功创建章节
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 201
-                  message:
-                    type: string
-                    example: "success"
-                  data:
-                    $ref: '#/components/schemas/ComicSection'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
   /comic/{id}/section/{section_id}/content:
     get:
       tags:

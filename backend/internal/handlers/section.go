@@ -20,32 +20,6 @@ func NewSectionHandler(sectionService *services.SectionService) *SectionHandler 
 	}
 }
 
-func (h *SectionHandler) CreateSection(c *gin.Context) {
-	comicID, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
-		utils.ErrorResponse(c, http.StatusBadRequest, "Invalid comic ID", err.Error())
-		return
-	}
-
-	var req struct {
-		Index  int    `json:"index" binding:"required"`
-		Detail string `json:"detail" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.ErrorResponse(c, http.StatusBadRequest, "Invalid request", err.Error())
-		return
-	}
-
-	section, err := h.sectionService.CreateSection(uint(comicID), req.Index, req.Detail)
-	if err != nil {
-		utils.ErrorResponse(c, http.StatusInternalServerError, "Failed to create section", err.Error())
-		return
-	}
-
-	utils.SuccessResponseWithStatus(c, http.StatusCreated, section)
-}
-
 func (h *SectionHandler) GetSectionContent(c *gin.Context) {
 	comicID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
