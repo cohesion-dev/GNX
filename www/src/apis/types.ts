@@ -24,8 +24,9 @@ export interface Comic {
 
 export interface ComicDetail {
   id: string;
+  icon_image_id: string;
+  background_image_id: string;
   title: string;
-  user_prompt: string;
   status: ComicStatus;
   roles: Role[];
   sections: Section[];
