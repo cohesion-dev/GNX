@@ -1,87 +1,74 @@
 package config
 
 import (
-	"fmt"
-
-	"github.com/spf13/viper"
+	"os"
 )
 
 type Config struct {
-	Database DatabaseConfig `mapstructure:"database"`
-	Server   ServerConfig   `mapstructure:"server"`
-	OpenAI   OpenAIConfig   `mapstructure:"openai"`
-	Qiniu    QiniuConfig    `mapstructure:"qiniu"`
-}
-
-type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     string `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	DBName   string `mapstructure:"dbname"`
+	Server   ServerConfig
+	Database DatabaseConfig
+	Storage  StorageConfig
+	AI       AIConfig
 }
 
 type ServerConfig struct {
-	Port string `mapstructure:"port"`
+	Port string
 }
 
-type OpenAIConfig struct {
-	APIKey        string `mapstructure:"api_key"`
-	BaseURL       string `mapstructure:"base_url"`
-	ImageModel    string `mapstructure:"image_model"`
-	LanguageModel string `mapstructure:"language_model"`
+type DatabaseConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	DBName   string
+	SSLMode  string
 }
 
-type QiniuConfig struct {
-	AccessKey string `mapstructure:"access_key"`
-	SecretKey string `mapstructure:"secret_key"`
-	Bucket    string `mapstructure:"bucket"`
-	Domain    string `mapstructure:"domain"`
+type StorageConfig struct {
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	Domain    string
 }
 
-func LoadConfig() (*Config, error) {
-	v := viper.New()
+type AIConfig struct {
+	APIKey        string
+	BaseURL       string
+	ImageModel    string
+	LanguageModel string
+}
 
-	v.SetConfigName("config")
-	v.SetConfigType("yaml")
-	v.AddConfigPath("./config")
-	v.AddConfigPath(".")
-
-	v.SetDefault("database.host", "localhost")
-	v.SetDefault("database.port", "5432")
-	v.SetDefault("database.user", "postgres")
-	v.SetDefault("database.password", "")
-	v.SetDefault("database.dbname", "gnx")
-	v.SetDefault("server.port", "8080")
-
-	v.AutomaticEnv()
-	v.SetEnvPrefix("")
-
-	v.BindEnv("database.host", "DB_HOST")
-	v.BindEnv("database.port", "DB_PORT")
-	v.BindEnv("database.user", "DB_USER")
-	v.BindEnv("database.password", "DB_PASSWORD")
-	v.BindEnv("database.dbname", "DB_NAME")
-	v.BindEnv("server.port", "SERVER_PORT")
-	v.BindEnv("openai.api_key", "OPENAI_API_KEY")
-	v.BindEnv("openai.base_url", "OPENAI_BASE_URL")
-	v.BindEnv("openai.image_model", "OPENAI_IMAGE_MODEL")
-	v.BindEnv("openai.language_model", "OPENAI_LANGUAGE_MODEL")
-	v.BindEnv("qiniu.access_key", "QINIU_ACCESS_KEY")
-	v.BindEnv("qiniu.secret_key", "QINIU_SECRET_KEY")
-	v.BindEnv("qiniu.bucket", "QINIU_BUCKET")
-	v.BindEnv("qiniu.domain", "QINIU_DOMAIN")
-
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
-		}
+func Load() *Config {
+	return &Config{
+		Server: ServerConfig{
+			Port: getEnv("SERVER_PORT", "8080"),
+		},
+		Database: DatabaseConfig{
+			Host:     getEnv("DB_HOST", "localhost"),
+			Port:     getEnv("DB_PORT", "5432"),
+			User:     getEnv("DB_USER", "postgres"),
+			Password: getEnv("DB_PASSWORD", ""),
+			DBName:   getEnv("DB_NAME", "gnx"),
+			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+		},
+		Storage: StorageConfig{
+			AccessKey: getEnv("QINIU_ACCESS_KEY", ""),
+			SecretKey: getEnv("QINIU_SECRET_KEY", ""),
+			Bucket:    getEnv("QINIU_BUCKET", ""),
+			Domain:    getEnv("QINIU_DOMAIN", ""),
+		},
+		AI: AIConfig{
+			APIKey:        getEnv("OPENAI_API_KEY", ""),
+			BaseURL:       getEnv("OPENAI_BASE_URL", "https://openai.qiniu.com/v1"),
+			ImageModel:    getEnv("OPENAI_IMAGE_MODEL", "gemini-2.5-flash-image"),
+			LanguageModel: getEnv("OPENAI_LANGUAGE_MODEL", "deepseek/deepseek-v3.1-terminus"),
+		},
 	}
+}
 
-	var config Config
-	if err := v.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
-
-	return &config, nil
+	return defaultValue
 }
