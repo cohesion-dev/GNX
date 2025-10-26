@@ -6,11 +6,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  env: {
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || '',
+  },
   async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:9000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:9000/:path*',
+        destination: `${backendUrl}/:path*`,
       },
     ]
   },
