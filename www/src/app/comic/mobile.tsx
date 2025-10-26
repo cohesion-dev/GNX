@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { getComics, type Comic } from '@/apis'
 import ComicIcon from '@/components/ComicIcon'
+import { usePolling } from '@/hooks/usePolling'
 
 const ComicListMobile = () => {
   const router = useRouter()
@@ -13,6 +14,7 @@ const ComicListMobile = () => {
   const [hasMore, setHasMore] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [shakeId, setShakeId] = useState<string | null>(null)
+  const [hasInitialLoad, setHasInitialLoad] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
   const pullDistance = useRef(0)
@@ -31,6 +33,9 @@ const ComicListMobile = () => {
           setComics(prev => [...prev, ...newComics])
         }
         setHasMore(newComics.length === 100)
+        if (!hasInitialLoad) {
+          setHasInitialLoad(true)
+        }
       }
     } catch (error) {
       console.error('Failed to fetch comics:', error)
@@ -38,11 +43,25 @@ const ComicListMobile = () => {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [loading])
+  }, [loading, hasInitialLoad])
 
   useEffect(() => {
     fetchComics(1, true)
   }, [])
+
+  const hasPendingComics = useMemo(() => {
+    return comics.some(comic => comic.status === 'pending')
+  }, [comics])
+
+  usePolling(
+    useCallback(async () => {
+      if (!loading && !refreshing) {
+        await fetchComics(1, true)
+      }
+    }, [loading, refreshing, fetchComics]),
+    hasPendingComics,
+    3000
+  )
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -224,7 +243,7 @@ const ComicListMobile = () => {
           </div>
         ))}
         
-        {loading && !refreshing && (
+        {loading && !refreshing && !hasInitialLoad && (
           <div className="flex justify-center py-4">
             <svg
               className="w-8 h-8 animate-spin"
