@@ -119,7 +119,7 @@ func splitChaptersFromText(raw string) []novelChapter {
 	}
 
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
+		trimmed := normalizeHeadingCandidate(line)
 		if chapterHeadingPattern.MatchString(trimmed) {
 			flush()
 			currentTitle = trimmed
@@ -134,6 +134,27 @@ func splitChaptersFromText(raw string) []novelChapter {
 
 	flush()
 	return chapters
+}
+
+// normalizeHeadingCandidate strips zero-width characters that often wrap headings in web-crawled novels.
+func normalizeHeadingCandidate(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return trimmed
+	}
+
+	var b strings.Builder
+	b.Grow(len(trimmed))
+	for _, r := range trimmed {
+		switch r {
+		case '\u200B', '\u200C', '\u200D', '\uFEFF':
+			continue
+		default:
+			b.WriteRune(r)
+		}
+	}
+
+	return b.String()
 }
 
 func (s *ComicService) processComicSync(ctx context.Context, comicID uint, content string) error {

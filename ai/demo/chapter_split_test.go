@@ -1,11 +1,25 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestS(t *testing.T) {
+	path := filepath.Join("樱花邮差与夜读先生.txt")
+	chapters, err := SplitChaptersFromFile(path)
+	require.NoError(t, err)
+
+	fmt.Println("Chapters:")
+	for i, chapter := range chapters {
+		fmt.Printf("Chapter %d: %v\n", i+1, chapter)
+	}
+	panic("")
+
+}
 
 func TestSplitChaptersFromFile(t *testing.T) {
 	path := filepath.Join("frxxz.txt")
