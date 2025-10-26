@@ -340,36 +340,24 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /comic/{id}/section/{section_id}/storyboard/{storyboard_id}/image:
+  /panel/{panel_id}/image:
     get:
       tags:
         - 资源管理
-      summary: 获取章节图片
-      description: 获取指定分镜的图片资源
+      summary: 获取面板图片
+      description: 获取指定面板的图片资源
       parameters:
-        - name: id
+        - name: panel_id
           in: path
           required: true
-          description: 漫画ID
-          schema:
-            type: integer
-        - name: section_id
-          in: path
-          required: true
-          description: 章节ID
-          schema:
-            type: integer
-        - name: storyboard_id
-          in: path
-          required: true
-          description: 分镜ID
+          description: 面板ID
           schema:
             type: integer
       responses:
         '200':
           description: 成功获取图片
           content:
-            image/*:
+            image/png:
               schema:
                 type: string
                 format: binary
