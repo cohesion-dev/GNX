@@ -207,6 +207,9 @@ const ComicListMobile = () => {
                 <h3 className="text-cyan-400 font-bold text-lg mb-1">
                   {comic.title}
                 </h3>
+                <p className="text-gray-300 text-sm line-clamp-3">
+                  {comic.brief}
+                </p>
               </div>
 
               {getStatusIcon(comic.status) && (

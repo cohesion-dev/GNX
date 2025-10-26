@@ -17,6 +17,7 @@ export interface Comic {
   icon_image_id: string;
   background_image_id: string;
   title: string;
+  brief: string;
   status: ComicStatus;
   created_at: string;
   updated_at: string;
@@ -27,6 +28,7 @@ export interface ComicDetail {
   icon_image_id: string;
   background_image_id: string;
   title: string;
+  brief: string;
   status: ComicStatus;
   roles: Role[];
   sections: Section[];
