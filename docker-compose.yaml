@@ -20,36 +20,6 @@ services:
     networks:
       - gnx-network
 
-  backend_new:
-    build:
-      context: .
-      dockerfile: backend_new/Dockerfile
-    container_name: gnx-backend-new
-    environment:
-      SERVER_PORT: 8080
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: gnx
-      DB_SSLMODE: disable
-      QINIU_ACCESS_KEY: ${QINIU_ACCESS_KEY:-}
-      QINIU_SECRET_KEY: ${QINIU_SECRET_KEY:-}
-      QINIU_BUCKET: ${QINIU_BUCKET:-}
-      QINIU_DOMAIN: ${QINIU_DOMAIN:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://openai.qiniu.com/v1}
-      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gemini-2.5-flash-image}
-      OPENAI_LANGUAGE_MODEL: ${OPENAI_LANGUAGE_MODEL:-deepseek/deepseek-v3.1-terminus}
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - gnx-network
-    restart: unless-stopped
-
 volumes:
   postgres_data:
     driver: local
