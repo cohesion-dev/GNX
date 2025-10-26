@@ -1,15 +1,13 @@
-version: '3.8'
-
+name: gnx
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: gnx-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: gnx
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,13 +20,12 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: gnx-pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@gnx.com
       PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
-      - "5050:80"
+      - "5055:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
@@ -37,11 +34,62 @@ services:
     networks:
       - gnx-network
 
+  backend:
+    build:
+      dockerfile: Dockerfile
+      context: ./backend/
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: gnx
+      DB_SSLMODE: disable
+      QINIU_ACCESS_KEY: ${QINIU_ACCESS_KEY}
+      QINIU_SECRET_KEY: ${QINIU_SECRET_KEY}
+      QINIU_BUCKET: ${QINIU_BUCKET}
+      QINIU_DOMAIN: ${QINIU_DOMAIN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL}
+      OPENAI_LANGUAGE_MODEL: ${OPENAI_LANGUAGE_MODEL}
+    volumes:
+      - ./backend:/app/backend
+      - ./ai:/app/ai
+      - go_pkg:/go/pkg
+      - go_build_cache:/root/.cache/go-build
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gnx-network
+  www:
+    image: node:23.9.0-alpine3.21
+    ports:
+      - "8085:3000"
+    volumes:
+      - ./www:/app/www
+    working_dir: /app/www
+    entrypoint: ""
+    command:
+      - /bin/sh
+      - -c
+      - |
+        npm install
+        npm run dev
+    depends_on:
+      - backend
+    networks:
+      - gnx-network
+
 volumes:
   postgres_data:
-    driver: local
   pgadmin_data:
-    driver: local
+  go_pkg: # go 依赖包
+  go_build_cache: # go build 缓存
 
 networks:
   gnx-network:
