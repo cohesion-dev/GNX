@@ -90,14 +90,14 @@ func (h *SectionHandler) GetStoryboards(c *gin.Context) {
 	utils.SuccessResponse(c, storyboards)
 }
 
-func (h *SectionHandler) GetStoryboardImage(c *gin.Context) {
+func (h *SectionHandler) GetPanelImage(c *gin.Context) {
 	panelID, err := strconv.ParseUint(c.Param("panel_id"), 10, 32)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, "Invalid panel ID", err.Error())
 		return
 	}
 
-	imageData, err := h.sectionService.GetStoryboardImage(uint(panelID))
+	imageData, err := h.sectionService.GetPanelImage(uint(panelID))
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusNotFound, "Image not found", err.Error())
 		return

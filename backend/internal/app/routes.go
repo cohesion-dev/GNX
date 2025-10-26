@@ -16,7 +16,7 @@ func (s *Server) setupRoutes() {
 			comic.GET("/:id/section/:section_id/storyboards", s.sectionHandler.GetStoryboards)
 		}
 
-		api.GET("/panel/:panel_id/image", s.sectionHandler.GetStoryboardImage)
+		api.GET("/panel/:panel_id/image", s.sectionHandler.GetPanelImage)
 		api.GET("/tts/:storyboard_tts_id", s.ttsHandler.GetTTSAudio)
 	}
 }
