@@ -450,3 +450,95 @@ func ComposePageImagePrompt(stylePrefix string, page StoryboardPage) string {
 
 	return strings.TrimSpace(builder.String())
 }
+
+type ComicMetadataInput struct {
+	NovelTitle string
+	NovelContent string
+	UserPrompt string
+}
+
+type ComicMetadataOutput struct {
+	Brief      string `json:"brief"`
+	IconPrompt string `json:"icon_prompt"`
+	BgPrompt   string `json:"bg_prompt"`
+}
+
+func (g *GnxAIGC) GenerateComicMetadata(ctx context.Context, input ComicMetadataInput) (*ComicMetadataOutput, error) {
+	prompt := fmt.Sprintf(`你是一个专业的动漫内容策划师。请根据小说内容生成动漫的元数据信息。
+
+小说标题：《%s》
+
+用户提示词：%s
+
+请分析小说内容，生成以下信息：
+1. brief: 动漫简介（100-200字的中文简介，概述故事的核心情节、主要角色和主题）
+2. icon_prompt: 动漫封面图生成提示词（英文，描述一个吸引人的封面场景，体现故事的核心元素和氛围）
+3. bg_prompt: 动漫背景图生成提示词（英文，描述一个宽幅的背景场景，展现故事的主要场景或氛围）
+
+要求：
+- brief 使用中文，简洁明了
+- icon_prompt 和 bg_prompt 必须使用英文
+- icon_prompt 应聚焦于一个核心视觉元素，适合作为图标
+- bg_prompt 应描绘宽幅场景，适合作为背景
+- 所有提示词不要包含文字或中文字符的描述
+- 结合用户提示词的风格要求
+
+请严格按照以下JSON格式输出，不要包含任何其他说明文字：
+{
+  "brief": "动漫简介",
+  "icon_prompt": "Icon generation prompt in English",
+  "bg_prompt": "Background generation prompt in English"
+}`,
+		input.NovelTitle,
+		input.UserPrompt,
+	)
+
+	resp, err := g.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model: g.LanguageModel,
+		N:     openai.Int(1),
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			{
+				OfSystem: &openai.ChatCompletionSystemMessageParam{
+					Content: openai.ChatCompletionSystemMessageParamContentUnion{
+						OfString: openai.String(prompt),
+					},
+				},
+			},
+			{
+				OfUser: &openai.ChatCompletionUserMessageParam{
+					Content: openai.ChatCompletionUserMessageParamContentUnion{
+						OfString: openai.String(input.NovelContent),
+					},
+				},
+			},
+		},
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate comic metadata: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return nil, errors.New("no chat completion choices received")
+	}
+
+	content := resp.Choices[0].Message.Content
+
+	var output ComicMetadataOutput
+	if err := json.Unmarshal([]byte(content), &output); err == nil {
+		return &output, nil
+	}
+
+	contentFixed, err := jsonrepair.RepairJSON(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to repair JSON content: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(contentFixed), &output); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal comic metadata JSON: %w", err)
+	}
+
+	return &output, nil
+}
