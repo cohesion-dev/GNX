@@ -79,13 +79,6 @@ func collectSegmentCharacterKeys(segment gnxaigc.SourceTextSegment, chapterFeatu
 	for _, name := range segment.CharacterNames {
 		appendName(name)
 	}
-
-	for _, idx := range segment.CharacterRefs {
-		if idx < 0 || idx >= len(chapterFeatures) {
-			continue
-		}
-		appendName(chapterFeatures[idx].Basic.Name)
-	}
 }
 
 func collectPageCharacterKeys(page gnxaigc.StoryboardPage, chapterFeatures []gnxaigc.CharacterFeature) []string {
