@@ -7,6 +7,7 @@ export class ComicReadStore {
   comicId: string = ''
   sectionId: string = ''
   sectionData: SectionDetail | null = null
+  comicTitle: string = ''
   
   isPlaying: boolean = false
   showOverlay: boolean = false
@@ -97,6 +98,7 @@ export class ComicReadStore {
             id: s.id,
             index: s.index
           }))
+          this.comicTitle = response.data.title
         })
       }
     } catch (error) {

@@ -82,7 +82,7 @@ const ComicReadMobile = observer(() => {
               ←
             </button>
             <h1 className="text-white text-lg font-medium flex-1 text-center mx-4">
-              漫画阅读
+              {store.comicTitle || '漫画阅读'}
             </h1>
             <div className="w-10"></div>
           </div>
