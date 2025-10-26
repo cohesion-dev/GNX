@@ -89,3 +89,33 @@ func (h *SectionHandler) GetStoryboards(c *gin.Context) {
 
 	utils.SuccessResponse(c, storyboards)
 }
+
+func (h *SectionHandler) GetStoryboardImage(c *gin.Context) {
+	comicID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Invalid comic ID", err.Error())
+		return
+	}
+
+	sectionID, err := strconv.ParseUint(c.Param("section_id"), 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Invalid section ID", err.Error())
+		return
+	}
+
+	storyboardID, err := strconv.ParseUint(c.Param("storyboard_id"), 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Invalid storyboard ID", err.Error())
+		return
+	}
+
+	imageData, err := h.sectionService.GetStoryboardImage(uint(comicID), uint(sectionID), uint(storyboardID))
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusNotFound, "Image not found", err.Error())
+		return
+	}
+
+	c.Header("Content-Type", "image/png")
+	c.Header("Content-Length", strconv.Itoa(len(imageData)))
+	c.Data(http.StatusOK, "image/png", imageData)
+}
