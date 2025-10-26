@@ -3,20 +3,23 @@ package services
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cohesion-dev/GNX/ai/gnxaigc"
 	"github.com/cohesion-dev/GNX/backend_new/internal/models"
 	"github.com/cohesion-dev/GNX/backend_new/internal/repositories"
+	"github.com/cohesion-dev/GNX/backend_new/pkg/imageutil"
 	"github.com/cohesion-dev/GNX/backend_new/pkg/storage"
 )
 
 type SectionService struct {
-	comicRepo   *repositories.ComicRepository
-	roleRepo    *repositories.RoleRepository
-	sectionRepo *repositories.SectionRepository
-	pageRepo    *repositories.PageRepository
-	storage     *storage.Storage
-	aigc        *gnxaigc.GnxAIGC
+	comicRepo    *repositories.ComicRepository
+	roleRepo     *repositories.RoleRepository
+	sectionRepo  *repositories.SectionRepository
+	pageRepo     *repositories.PageRepository
+	storage      *storage.Storage
+	aigc         *gnxaigc.GnxAIGC
+	charService  *CharacterService
 }
 
 func NewSectionService(
@@ -26,14 +29,16 @@ func NewSectionService(
 	pageRepo *repositories.PageRepository,
 	storage *storage.Storage,
 	aigc *gnxaigc.GnxAIGC,
+	charService *CharacterService,
 ) *SectionService {
 	return &SectionService{
-		comicRepo:   comicRepo,
-		roleRepo:    roleRepo,
-		sectionRepo: sectionRepo,
-		pageRepo:    pageRepo,
-		storage:     storage,
-		aigc:        aigc,
+		comicRepo:    comicRepo,
+		roleRepo:     roleRepo,
+		sectionRepo:  sectionRepo,
+		pageRepo:     pageRepo,
+		storage:      storage,
+		aigc:         aigc,
+		charService:  charService,
 	}
 }
 
@@ -233,31 +238,134 @@ func (s *SectionService) processSectionImages(ctx context.Context, comic *models
 		return
 	}
 
+	characterAssets, err := s.charService.SyncCharacterAssets(ctx, comic.ID, comic.UserPrompt, summary.CharacterFeatures)
+	if err != nil {
+		fmt.Printf("Failed to sync character assets for section %d: %v\n", sectionID, err)
+		characterAssets = make(map[string]*CharacterAsset)
+	}
+
 	pages, err := s.pageRepo.FindBySectionID(sectionID)
 	if err != nil {
 		fmt.Printf("Failed to get pages for section %d: %v\n", sectionID, err)
 		return
 	}
 
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+	)
+
+	totalPages := len(summary.StoryboardPages)
 	for pageIndex, storyboardPage := range summary.StoryboardPages {
 		if pageIndex >= len(pages) {
 			break
 		}
 
-		page := pages[pageIndex]
+		wg.Add(1)
+		go func(pageIndex int, page models.ComicPage, storyboardPage gnxaigc.StoryboardPage) {
+			defer wg.Done()
 
-		fullPrompt := gnxaigc.ComposePageImagePrompt(comic.UserPrompt, storyboardPage)
-		imageData, err := s.aigc.GenerateImageByText(ctx, fullPrompt)
-		if err != nil {
-			fmt.Printf("Failed to generate page image for page %d: %v\n", page.ID, err)
-			continue
-		}
+			mu.Lock()
+			fmt.Printf("  [Page %d/%d] Generating image...\n", pageIndex+1, totalPages)
+			mu.Unlock()
 
-		imageID := fmt.Sprintf("%d", page.ID)
-		if err := s.storage.UploadBytes(imageData, imageID); err != nil {
-			fmt.Printf("Failed to upload page image for page %d: %v\n", page.ID, err)
+			fullPrompt := gnxaigc.ComposePageImagePrompt(comic.UserPrompt, storyboardPage)
+
+			referenceKeys := s.collectPageCharacterKeys(storyboardPage, summary.CharacterFeatures)
+			var referenceImages [][]byte
+			for _, key := range referenceKeys {
+				asset := characterAssets[key]
+				if asset == nil || len(asset.ImageData) == 0 {
+					continue
+				}
+				referenceImages = append(referenceImages, asset.ImageData)
+			}
+
+			var (
+				imageData []byte
+				err       error
+			)
+
+			switch len(referenceImages) {
+			case 0:
+				imageData, err = s.aigc.GenerateImageByText(ctx, fullPrompt)
+			case 1:
+				mu.Lock()
+				fmt.Printf("    Using single reference image for page %d\n", pageIndex+1)
+				mu.Unlock()
+				imageData, err = s.aigc.GenerateImageByImage(ctx, referenceImages[0], fullPrompt)
+				if err != nil {
+					mu.Lock()
+					fmt.Printf("    Error generating page image via img2img: %v\n", err)
+					fmt.Printf("    Falling back to text-to-image for page %d\n", pageIndex+1)
+					mu.Unlock()
+					imageData, err = s.aigc.GenerateImageByText(ctx, fullPrompt)
+				}
+			default:
+				composite, mergeErr := imageutil.MergeImagesSideBySide(referenceImages)
+				if mergeErr != nil {
+					mu.Lock()
+					fmt.Printf("    Warning: failed to merge %d reference images for page %d: %v\n", len(referenceImages), pageIndex+1, mergeErr)
+					mu.Unlock()
+					imageData, err = s.aigc.GenerateImageByText(ctx, fullPrompt)
+					break
+				}
+
+				mu.Lock()
+				fmt.Printf("    Merged %d reference images for page %d\n", len(referenceImages), pageIndex+1)
+				mu.Unlock()
+				imageData, err = s.aigc.GenerateImageByImage(ctx, composite, fullPrompt)
+				if err != nil {
+					mu.Lock()
+					fmt.Printf("    Error generating page image via merged img2img: %v\n", err)
+					fmt.Printf("    Falling back to text-to-image for page %d\n", pageIndex+1)
+					mu.Unlock()
+					imageData, err = s.aigc.GenerateImageByText(ctx, fullPrompt)
+				}
+			}
+
+			if err != nil {
+				mu.Lock()
+				fmt.Printf("    Error generating image for page %d: %v\n", pageIndex+1, err)
+				mu.Unlock()
+			} else {
+				imageID := fmt.Sprintf("%d", page.ID)
+				if err := s.storage.UploadBytes(imageData, imageID); err != nil {
+					mu.Lock()
+					fmt.Printf("    Error uploading image for page %d: %v\n", pageIndex+1, err)
+					mu.Unlock()
+				} else {
+					mu.Lock()
+					fmt.Printf("    Successfully uploaded image for page %d\n", pageIndex+1)
+					mu.Unlock()
+				}
+			}
+		}(pageIndex, pages[pageIndex], storyboardPage)
+	}
+
+	wg.Wait()
+	fmt.Printf("Completed image generation for section %d\n", sectionID)
+}
+
+func (s *SectionService) collectPageCharacterKeys(page gnxaigc.StoryboardPage, features []gnxaigc.CharacterFeature) []string {
+	nameSet := make(map[string]bool)
+	for _, panel := range page.Panels {
+		for _, segment := range panel.SourceTextSegments {
+			for _, name := range segment.CharacterNames {
+				if name != "" {
+					nameSet[name] = true
+				}
+			}
 		}
 	}
+
+	var keys []string
+	for _, feature := range features {
+		if nameSet[feature.Basic.Name] {
+			keys = append(keys, feature.Basic.Name)
+		}
+	}
+	return keys
 }
 
 func (s *SectionService) updateSectionStatus(sectionID uint, status string) {

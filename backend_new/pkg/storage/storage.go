@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/cohesion-dev/GNX/backend_new/config"
@@ -56,4 +58,25 @@ func (s *Storage) GetPrivateURL(key string, expires time.Duration) string {
 	deadline := time.Now().Add(expires).Unix()
 	privateURL := storage.MakePrivateURL(s.mac, s.domain, key, deadline)
 	return privateURL
+}
+
+func (s *Storage) DownloadBytes(key string) ([]byte, error) {
+	privateURL := s.GetPrivateURL(key, time.Hour)
+	
+	resp, err := http.Get(privateURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download: status code %d", resp.StatusCode)
+	}
+	
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	
+	return data, nil
 }
