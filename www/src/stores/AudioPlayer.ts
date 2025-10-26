@@ -75,6 +75,10 @@ export class AudioPlayer {
   stop(): void {
     if (this.currentAudio) {
       this.currentAudio.pause()
+      this.currentAudio.onended = null
+      this.currentAudio.onerror = null
+      this.currentAudio.ontimeupdate = null
+      this.currentAudio.onloadedmetadata = null
       this.currentAudio.src = ''
       this.currentAudio = null
       this.isPlaying = false

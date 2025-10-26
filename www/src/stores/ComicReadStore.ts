@@ -22,6 +22,7 @@ export class ComicReadStore {
   private audioPlayer: AudioPlayer
   private pageManager: PageManager
   private sections: Array<{ id: string; index: number }> = []
+  private isTransitioning: boolean = false
 
   constructor() {
     makeAutoObservable(this)
@@ -211,8 +212,15 @@ export class ComicReadStore {
   }
 
   nextAudio(): void {
+    if (this.isTransitioning) return
+    
+    this.isTransitioning = true
+    
     const page = this.currentPage
-    if (!page) return
+    if (!page) {
+      this.isTransitioning = false
+      return
+    }
     
     if (this.currentAudioIndex < page.details.length - 1) {
       runInAction(() => {
@@ -224,6 +232,10 @@ export class ComicReadStore {
     } else {
       this.nextPage()
     }
+    
+    setTimeout(() => {
+      this.isTransitioning = false
+    }, 100)
   }
 
   async nextPage(): Promise<void> {
