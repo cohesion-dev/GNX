@@ -1,4 +1,4 @@
-let API_BASE_URL = localStorage.getItem('api_base_url') || 'http://localhost:8000';
+let API_BASE_URL = localStorage.getItem('api_base_url') || 'http://localhost:8080';
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('api-base-url').value = API_BASE_URL;

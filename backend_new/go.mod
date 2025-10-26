@@ -2,7 +2,7 @@ module github.com/cohesion-dev/GNX/backend_new
 
 go 1.24.0
 
-toolchain go1.24.5
+toolchain go1.24.4
 
 require (
 	github.com/cohesion-dev/GNX/ai v0.0.0
