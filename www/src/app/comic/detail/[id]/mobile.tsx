@@ -14,6 +14,7 @@ const ComicDetailMobile = () => {
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [shakeId, setShakeId] = useState<string | null>(null)
+  const [hasInitialLoad, setHasInitialLoad] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
   const pullDistance = useRef(0)
@@ -28,6 +29,9 @@ const ComicDetailMobile = () => {
       if (comicResponse.code === 200) {
         setComic(comicResponse.data)
         setSections(comicResponse.data.sections || [])
+        if (!hasInitialLoad) {
+          setHasInitialLoad(true)
+        }
       }
     } catch (error) {
       console.error('Failed to fetch comic data:', error)
@@ -35,7 +39,7 @@ const ComicDetailMobile = () => {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [params?.id])
+  }, [params?.id, hasInitialLoad])
 
   useEffect(() => {
     fetchComicData(true)
@@ -244,7 +248,7 @@ const ComicDetailMobile = () => {
           ))}
         </div>
         
-        {loading && !refreshing && (
+        {loading && !refreshing && !hasInitialLoad && (
           <div className="flex justify-center py-8">
             <svg
               className="w-8 h-8 animate-spin"
