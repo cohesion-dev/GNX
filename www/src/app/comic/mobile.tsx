@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { getComics, type Comic } from '@/apis'
 import ComicIcon from '@/components/ComicIcon'
+import { usePolling } from '@/hooks/usePolling'
 
 const ComicListMobile = () => {
   const router = useRouter()
@@ -43,6 +44,20 @@ const ComicListMobile = () => {
   useEffect(() => {
     fetchComics(1, true)
   }, [])
+
+  const hasPendingComics = useMemo(() => {
+    return comics.some(comic => comic.status === 'pending')
+  }, [comics])
+
+  usePolling(
+    useCallback(async () => {
+      if (!loading && !refreshing) {
+        await fetchComics(1, true)
+      }
+    }, [loading, refreshing, fetchComics]),
+    hasPendingComics,
+    3000
+  )
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
