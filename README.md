@@ -16,6 +16,14 @@
 
 七牛：https://www.bilibili.com/video/BV1TxszzKEdG/
 
+## 演示使用的 AI 模型
+
+演示使用均是七牛模型 [七牛官网](https://www.qiniu.com/) [七牛AI模型市场](https://portal.qiniu.com/ai-inference/model)
+
+- 大语言模型：deepseek/deepseek-v3.1-terminus, z-ai/glm-4.6
+- 多模态大模型（图生图/文生图）：gemini-2.5-flash-image
+- TTS语音合成模型：qiniu_tts
+
 ## 产品定位
 
 - 产品名：沉浸式有声漫画群像剧
@@ -46,4 +54,9 @@
 
 ## 未来规划
 
-TODO.
+1. 动漫角色图片，角色描述，角色音色等均可调整
+2. 支持多租户
+3. AI 模型可配置
+4. TTS 结果缓存
+5. VIP 收费业务
+6. 视频动漫 
