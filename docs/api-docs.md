@@ -76,7 +76,8 @@ GET /comics/{comic_id}/
   data: {
     id: "string", // 漫画唯一标识符
     title: "string", // 漫画标题
-    user_prompt: "string", // 用户提示词
+    icon_image_id: "string", // 漫画封面图片ID
+    background_image_id: "string", // 漫画背景图片ID
     status: "<failed|completed|pending>", // 漫画状态
     roles: [
       // 漫画中的角色列表
