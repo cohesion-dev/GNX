@@ -35,16 +35,16 @@ func NewRouter(
 }
 
 func (r *Router) Setup() *gin.Engine {
-	r.engine.GET("/comics/", r.comicHandler.ListComics)
-	r.engine.POST("/comics/", r.comicHandler.CreateComic)
-	r.engine.GET("/comics/:comic_id/", r.comicHandler.GetComicDetail)
+	r.engine.GET("/api/comics/", r.comicHandler.ListComics)
+	r.engine.POST("/api/comics/", r.comicHandler.CreateComic)
+	r.engine.GET("/api/comics/:comic_id/", r.comicHandler.GetComicDetail)
 
-	r.engine.POST("/comics/:comic_id/sections/", r.sectionHandler.CreateSection)
-	r.engine.GET("/comics/:comic_id/sections/:section_id/", r.sectionHandler.GetSectionDetail)
+	r.engine.POST("/api/comics/:comic_id/sections/", r.sectionHandler.CreateSection)
+	r.engine.GET("/api/comics/:comic_id/sections/:section_id/", r.sectionHandler.GetSectionDetail)
 
-	r.engine.GET("/images/:image_id/url", r.imageHandler.GetImageURL)
+	r.engine.GET("/api/images/:image_id/url", r.imageHandler.GetImageURL)
 
-	r.engine.GET("/tts/:tts_id", r.ttsHandler.GetTTSAudio)
+	r.engine.GET("/api/tts/:tts_id", r.ttsHandler.GetTTSAudio)
 
 	return r.engine
 }

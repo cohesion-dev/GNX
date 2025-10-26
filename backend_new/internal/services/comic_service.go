@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -87,7 +88,15 @@ func (s *ComicService) GetComicList(page, limit int, status string) ([]models.Co
 }
 
 func (s *ComicService) GetComicDetail(id uint) (*models.Comic, error) {
-	return s.comicRepo.FindByID(id)
+	ret, err := s.comicRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	// 对 sections 按 index 排序
+	slices.SortFunc(ret.Sections, func(a, b models.ComicSection) int {
+		return a.Index - b.Index
+	})
+	return ret, nil
 }
 
 type novelChapter struct {
@@ -398,6 +407,16 @@ func (s *ComicService) GetSectionDetail(comicID, sectionID uint) (*models.ComicS
 		return nil, fmt.Errorf("section does not belong to comic")
 	}
 
+	// 对 pages 按 index 排序
+	slices.SortFunc(section.Pages, func(a, b models.ComicPage) int {
+		return a.Index - b.Index
+	})
+	// 对每个 page 的 details 按 index 排序
+	for i := range section.Pages {
+		slices.SortFunc(section.Pages[i].Details, func(a, b models.ComicPageDetail) int {
+			return a.Index - b.Index
+		})
+	}
 	return section, nil
 }
 
