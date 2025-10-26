@@ -60,7 +60,7 @@ const ComicAddMobile = () => {
       })
 
       if (response.code === 200) {
-        router.push(`/comic/read/${response.data.id}`)
+        router.push(`/comic/read/${response.data.id}?section-index=1`)
       }
     } catch (error) {
       console.error('Failed to create comic:', error)

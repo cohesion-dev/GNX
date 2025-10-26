@@ -64,7 +64,7 @@ const ComicSectionAddMobile = () => {
       })
 
       if (response.code === 200) {
-        router.push(`/comic/detail/${params.id}`)
+        router.push(`/comic/read/${params.id}?section-index=${nextIndex}`)
       }
     } catch (error) {
       console.error('Failed to create section:', error)
