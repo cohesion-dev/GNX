@@ -11,6 +11,7 @@ const ComicSectionAddMobile = () => {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [file, setFile] = useState<File | null>(null)
+  const [title, setTitle] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -50,17 +51,16 @@ const ComicSectionAddMobile = () => {
   }, [])
 
   const handleSubmit = useCallback(async () => {
-    if (!file || !params?.id || !comic) {
+    if (!file || !params?.id || !comic || !title.trim()) {
       return
     }
 
     setSubmitting(true)
     try {
       const fileContent = await file.text()
-      const nextIndex = (comic.sections?.length || 0) + 1
       const response = await createSection(
         params.id,
-        `第 ${nextIndex} 章`,
+        title.trim(),
         fileContent
       )
 
@@ -72,9 +72,9 @@ const ComicSectionAddMobile = () => {
     } finally {
       setSubmitting(false)
     }
-  }, [file, params?.id, comic, router])
+  }, [file, params?.id, comic, title, router])
 
-  const isFormValid = file
+  const isFormValid = file && title.trim()
 
   return (
     <div className="min-h-screen text-white flex flex-col">
@@ -114,6 +114,17 @@ const ComicSectionAddMobile = () => {
               disabled
               placeholder="漫画名字"
               className="w-full bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none cursor-not-allowed opacity-75"
+            />
+          </div>
+
+          <div>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="起个名字"
+              className="w-full bg-white/10 backdrop-blur-md rounded-2xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              required
             />
           </div>
 
