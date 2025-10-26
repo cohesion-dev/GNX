@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getComics, type Comic } from '@/apis'
+import ComicIcon from '@/components/ComicIcon'
 
 const ComicListMobile = () => {
   const router = useRouter()
@@ -199,9 +200,11 @@ const ComicListMobile = () => {
             }}
           >
             <div className="flex gap-4 items-center">
-              <div className="w-16 h-16 flex items-center justify-center bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-full overflow-hidden flex-shrink-0">
-                <span className="text-3xl">📚</span>
-              </div>
+              <ComicIcon 
+                imageId={comic.icon_image_id}
+                alt={comic.title}
+                className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 object-cover"
+              />
 
               <div className="flex-1 min-w-0">
                 <h3 className="text-cyan-400 font-bold text-lg mb-1">

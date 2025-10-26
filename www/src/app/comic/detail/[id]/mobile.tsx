@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { getComic, type ComicDetail, type Section } from '@/apis'
+import ComicBackground from '@/components/ComicBackground'
 
 const ComicDetailMobile = () => {
   const router = useRouter()
@@ -151,11 +152,11 @@ const ComicDetailMobile = () => {
         {comic && (
           <div className="bg-white/10 backdrop-blur-md rounded-3xl p-4 mb-6">
             <div className="flex gap-4">
-              <div className="w-24 h-32 flex-shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600">
-                <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-4xl">📚</span>
-                </div>
-              </div>
+              <ComicBackground
+                imageId={comic.background_image_id}
+                alt={comic.title}
+                className="w-24 h-32 flex-shrink-0 rounded-lg overflow-hidden object-cover"
+              />
               <div className="flex-1 min-w-0">
                 <p className="text-gray-300 text-sm line-clamp-5">
                   {comic.brief}
