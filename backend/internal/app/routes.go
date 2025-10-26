@@ -11,11 +11,11 @@ func (s *Server) setupRoutes() {
 			comic.GET("/:id/sections", s.comicHandler.GetComicSections)
 			comic.POST("/:id/sections", s.comicHandler.AppendSections)
 
-			comic.POST("/:id/section", s.sectionHandler.CreateSection)
 			comic.GET("/:id/section/:section_id/content", s.sectionHandler.GetSectionContent)
 			comic.GET("/:id/section/:section_id/storyboards", s.sectionHandler.GetStoryboards)
 		}
 
+		api.GET("/panel/:panel_id/image", s.sectionHandler.GetPanelImage)
 		api.GET("/tts/:storyboard_tts_id", s.ttsHandler.GetTTSAudio)
 	}
 }

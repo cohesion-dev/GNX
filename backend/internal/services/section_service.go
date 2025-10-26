@@ -2,6 +2,8 @@ package services
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 
 	"gorm.io/gorm"
 
@@ -37,26 +39,6 @@ func NewSectionService(
 	}
 }
 
-func (s *SectionService) CreateSection(comicID uint, index int, detail string) (*models.ComicSection, error) {
-	_, err := s.comicRepo.GetByID(comicID)
-	if err != nil {
-		return nil, fmt.Errorf("comic not found: %w", err)
-	}
-
-	section := &models.ComicSection{
-		ComicID: comicID,
-		Index:   index,
-		Detail:  detail,
-		Status:  "pending",
-	}
-
-	if err := s.sectionRepo.Create(section); err != nil {
-		return nil, fmt.Errorf("failed to create section: %w", err)
-	}
-
-	return section, nil
-}
-
 func (s *SectionService) GetSectionContent(comicID, sectionID uint) (map[string]interface{}, error) {
 	section, err := s.sectionRepo.GetByID(sectionID)
 	if err != nil {
@@ -89,4 +71,32 @@ func (s *SectionService) GetStoryboards(comicID, sectionID uint) ([]models.Comic
 	}
 
 	return s.storyboardRepo.GetPagesBySectionID(sectionID)
+}
+
+func (s *SectionService) GetPanelImage(panelID uint) ([]byte, error) {
+	panel, err := s.storyboardRepo.GetPanelByID(panelID)
+	if err != nil {
+		return nil, fmt.Errorf("panel not found: %w", err)
+	}
+
+	if panel.ImageURL == "" {
+		return nil, fmt.Errorf("image not yet generated")
+	}
+
+	resp, err := http.Get(panel.ImageURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch image: status %d", resp.StatusCode)
+	}
+
+	imageData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image: %w", err)
+	}
+
+	return imageData, nil
 }
