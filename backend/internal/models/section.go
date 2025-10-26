@@ -1,23 +1,21 @@
 package models
 
-import (
-	"time"
-)
+import "time"
 
 type ComicSection struct {
-	ID        uint      `json:"id" gorm:"primaryKey"`
-	ComicID   uint      `json:"comic_id" gorm:"not null"`
-	Index     int       `json:"index" gorm:"not null"`
-	Title     string    `json:"title" gorm:"size:255"`
-	Detail    string    `json:"detail" gorm:"type:text;not null"`
-	Status    string    `json:"status" gorm:"size:20;default:'pending'"`
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ComicID   uint      `gorm:"not null;index" json:"comic_id"`
+	Title     string    `gorm:"" json:"title"`
+	Index     int       `gorm:"not null" json:"index"`
+	Content   string    `gorm:"type:text;not null" json:"-"`
+	Status    string    `gorm:"default:'pending'" json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	Comic Comic                  `json:"comic,omitempty" gorm:"foreignKey:ComicID"`
-	Pages []ComicStoryboardPage `json:"pages,omitempty" gorm:"foreignKey:SectionID"`
+	Comic Comic       `gorm:"foreignKey:ComicID" json:"-"`
+	Pages []ComicPage `gorm:"foreignKey:SectionID;orderBy:index" json:"pages,omitempty"`
 }
 
 func (ComicSection) TableName() string {
-	return "comic_section"
+	return "comic_sections"
 }

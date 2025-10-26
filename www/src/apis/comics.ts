@@ -5,8 +5,7 @@ import type {
   CreateComicData,
   ComicDetail,
 } from './types';
-
-const API_BASE = '/api';
+import { API_BASE } from './config';
 
 export async function getComics(
   params?: GetComicsParams

@@ -1,6 +1,5 @@
 import type { ApiResponse, CreateSectionData, SectionDetail } from './types';
-
-const API_BASE = '/api';
+import { API_BASE } from './config';
 
 export async function createSection(
   comicId: string,
