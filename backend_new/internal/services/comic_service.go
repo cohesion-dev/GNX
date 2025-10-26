@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
+	"strings"
 
 	"github.com/cohesion-dev/GNX/ai/gnxaigc"
 	"github.com/cohesion-dev/GNX/backend_new/internal/models"
@@ -11,6 +13,8 @@ import (
 	"github.com/cohesion-dev/GNX/backend_new/pkg/storage"
 	"github.com/google/uuid"
 )
+
+var chapterHeadingPattern = regexp.MustCompile(`^第[零〇一二三四五六七八九十百千万0-9]+章.*$`)
 
 type ComicService struct {
 	comicRepo   *repositories.ComicRepository
@@ -67,16 +71,101 @@ func (s *ComicService) GetComicDetail(id uint) (*models.Comic, error) {
 	return s.comicRepo.FindByID(id)
 }
 
+type novelChapter struct {
+	Title   string
+	Content string
+}
+
+func splitChaptersFromText(raw string) []novelChapter {
+	lines := strings.Split(raw, "\n")
+	var chapters []novelChapter
+	var currentTitle string
+	var buffer []string
+
+	flush := func() {
+		if currentTitle == "" && len(buffer) == 0 {
+			return
+		}
+		content := strings.Trim(strings.Join(buffer, "\n"), "\n")
+		chapters = append(chapters, novelChapter{Title: currentTitle, Content: content})
+	}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if chapterHeadingPattern.MatchString(trimmed) {
+			flush()
+			currentTitle = trimmed
+			buffer = buffer[:0]
+			continue
+		}
+		if currentTitle == "" && len(strings.TrimSpace(line)) == 0 {
+			continue
+		}
+		buffer = append(buffer, line)
+	}
+
+	flush()
+	return chapters
+}
+
 func (s *ComicService) processComicSync(ctx context.Context, comicID uint, content string) error {
 	comic, err := s.comicRepo.FindByID(comicID)
 	if err != nil {
 		return fmt.Errorf("failed to get comic %d: %w", comicID, err)
 	}
 
+	chapters := splitChaptersFromText(content)
+	if len(chapters) == 0 {
+		s.updateComicStatus(comicID, "failed")
+		return fmt.Errorf("no chapters found in the novel")
+	}
+
+	for i, chapter := range chapters {
+		title := chapter.Title
+		if title == "" {
+			title = fmt.Sprintf("第%d章", i+1)
+		}
+
+		section := &models.ComicSection{
+			ComicID: comicID,
+			Title:   title,
+			Index:   i + 1,
+			Content: chapter.Content,
+			Status:  "pending",
+		}
+		if err := s.sectionRepo.Create(section); err != nil {
+			fmt.Printf("Failed to create section %d: %v\n", i+1, err)
+			continue
+		}
+	}
+
+	comic.Status = "completed"
+	if err := s.comicRepo.Update(comic); err != nil {
+		fmt.Printf("Failed to update comic status: %v\n", err)
+	}
+
+	go s.processComicAI(context.Background(), comicID)
+
+	return nil
+}
+
+func (s *ComicService) processComicAI(ctx context.Context, comicID uint) {
+	comic, err := s.comicRepo.FindByID(comicID)
+	if err != nil {
+		fmt.Printf("Failed to get comic %d for AI processing: %v\n", comicID, err)
+		return
+	}
+
+	sections, err := s.sectionRepo.FindByComicID(comicID)
+	if err != nil || len(sections) == 0 {
+		fmt.Printf("Failed to get sections for comic %d: %v\n", comicID, err)
+		return
+	}
+
 	voices, err := s.aigc.GetVoiceList(ctx)
 	if err != nil {
-		s.updateComicStatus(comicID, "failed")
-		return fmt.Errorf("failed to get voice list for comic %d: %w", comicID, err)
+		fmt.Printf("Failed to get voice list for comic %d: %v\n", comicID, err)
+		return
 	}
 
 	voiceItems := make([]gnxaigc.TTSVoiceItem, 0, len(voices))
@@ -87,17 +176,18 @@ func (s *ComicService) processComicSync(ctx context.Context, comicID uint, conte
 		})
 	}
 
+	firstSection := sections[0]
 	summary, err := s.aigc.SummaryChapter(ctx, gnxaigc.SummaryChapterInput{
 		NovelTitle:           comic.Title,
-		ChapterTitle:         "第一章",
-		Content:              content,
+		ChapterTitle:         firstSection.Title,
+		Content:              firstSection.Content,
 		AvailableVoiceStyles: voiceItems,
 		CharacterFeatures:    []gnxaigc.CharacterFeature{},
 		MaxPanelsPerPage:     4,
 	})
 	if err != nil {
-		s.updateComicStatus(comicID, "failed")
-		return fmt.Errorf("failed to generate summary for comic %d: %w", comicID, err)
+		fmt.Printf("Failed to generate AI summary for comic %d: %v\n", comicID, err)
+		return
 	}
 
 	for _, charFeature := range summary.CharacterFeatures {
@@ -116,26 +206,7 @@ func (s *ComicService) processComicSync(ctx context.Context, comicID uint, conte
 		}
 	}
 
-	section := &models.ComicSection{
-		ComicID: comicID,
-		Title:   "第一章",
-		Index:   1,
-		Content: content,
-		Status:  "pending",
-	}
-	if err := s.sectionRepo.Create(section); err != nil {
-		s.updateComicStatus(comicID, "failed")
-		return fmt.Errorf("failed to create section: %w", err)
-	}
-
-	comic.Status = "completed"
-	if err := s.comicRepo.Update(comic); err != nil {
-		fmt.Printf("Failed to update comic status: %v\n", err)
-	}
-
-	go s.processComicImages(context.Background(), comicID)
-
-	return nil
+	s.processComicImages(ctx, comicID)
 }
 
 func (s *ComicService) processComicImages(ctx context.Context, comicID uint) {
