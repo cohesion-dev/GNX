@@ -131,6 +131,19 @@ func (s *ComicService) processComic(ctx context.Context, comicID uint, content s
 		}
 	}
 
+	section := &models.ComicSection{
+		ComicID: comicID,
+		Title:   "第一章",
+		Index:   1,
+		Content: content,
+		Status:  "pending",
+	}
+	if err := s.sectionRepo.Create(section); err != nil {
+		fmt.Printf("Failed to create section: %v\n", err)
+		s.updateComicStatus(comicID, "failed")
+		return
+	}
+
 	iconImageData, err := s.aigc.GenerateImageByText(ctx, fmt.Sprintf("Comic book cover for: %s, %s", comic.Title, comic.UserPrompt))
 	if err == nil {
 		iconImageID := uuid.New().String()
