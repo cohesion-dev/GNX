@@ -81,7 +81,9 @@ export class ComicReadStore {
       await this.loadComicSections()
       await this.loadSectionData()
       await this.checkAndLoadResources()
-      this.play()
+      runInAction(() => {
+        this.showOverlay = true
+      })
     } catch (error) {
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Initialization failed'
@@ -157,12 +159,23 @@ export class ComicReadStore {
     }
   }
 
-  play(): void {
+  async play(): Promise<void> {
     if (!this.currentPageDetail) return
     
-    this.isPlaying = true
-    this.showOverlay = false
-    this.playCurrentAudio()
+    runInAction(() => {
+      this.isPlaying = true
+      this.showOverlay = false
+    })
+    
+    try {
+      await this.playCurrentAudio()
+    } catch (error) {
+      console.error('Failed to start playback:', error)
+      runInAction(() => {
+        this.isPlaying = false
+        this.showOverlay = true
+      })
+    }
   }
 
   pause(): void {
@@ -272,11 +285,21 @@ export class ComicReadStore {
     }
   }
 
-  handlePlayButtonClick(): void {
+  async handlePlayButtonClick(): Promise<void> {
     if (!this.isPlaying) {
-      this.audioPlayer.resume()
-      this.isPlaying = true
-      this.showOverlay = false
+      if (this.audioPlayer.currentAudio) {
+        try {
+          await this.audioPlayer.resume()
+          runInAction(() => {
+            this.isPlaying = true
+            this.showOverlay = false
+          })
+        } catch (error) {
+          console.error('Failed to resume playback:', error)
+        }
+      } else {
+        await this.play()
+      }
     }
   }
 

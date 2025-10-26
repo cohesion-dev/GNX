@@ -60,10 +60,15 @@ export class AudioPlayer {
     }
   }
 
-  resume(): void {
+  async resume(): Promise<void> {
     if (this.currentAudio) {
-      this.currentAudio.play()
-      this.isPlaying = true
+      try {
+        await this.currentAudio.play()
+        this.isPlaying = true
+      } catch (error) {
+        this.isPlaying = false
+        throw error
+      }
     }
   }
 
