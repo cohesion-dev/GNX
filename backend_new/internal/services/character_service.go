@@ -8,6 +8,7 @@ import (
 	"github.com/cohesion-dev/GNX/ai/gnxaigc"
 	"github.com/cohesion-dev/GNX/backend_new/internal/models"
 	"github.com/cohesion-dev/GNX/backend_new/internal/repositories"
+	"github.com/cohesion-dev/GNX/backend_new/pkg/logger"
 	"github.com/cohesion-dev/GNX/backend_new/pkg/storage"
 )
 
@@ -55,22 +56,23 @@ func (s *CharacterService) SyncCharacterAssets(
 	assets := make(map[string]*CharacterAsset)
 	trimmedStyle := strings.TrimSpace(imageStyle)
 
+	logger.Info("[Character Assets] Syncing assets for %d characters", len(features))
 	for _, feature := range features {
 		name := strings.TrimSpace(feature.Basic.Name)
 		if name == "" {
-			fmt.Println("  Skipping character with empty name")
+			logger.Warn("[Character Assets] Skipping character with empty name")
 			continue
 		}
 
 		role, exists := roleMap[name]
 		if !exists {
-			fmt.Printf("  Character %s not found in roles\n", name)
+			logger.Warn("[Character Assets] Character %s not found in roles", name)
 			continue
 		}
 
 		prompt := strings.TrimSpace(feature.ConceptArtPrompt)
 		if prompt == "" {
-			fmt.Printf("  [Character %s] Missing concept_art_prompt, skip image generation\n", name)
+			logger.Warn("[Character Assets] Character %s missing concept_art_prompt, skipping image generation", name)
 			assets[name] = &CharacterAsset{
 				Feature: feature,
 			}
@@ -99,46 +101,47 @@ func (s *CharacterService) SyncCharacterAssets(
 			if role.ImageID != "" {
 				baseData, err := s.storage.DownloadBytes(role.ImageID)
 				if err != nil {
-					fmt.Printf("  [Character %s] Warning: cannot read existing concept art (%v), fallback to text generation\n", name, err)
+					logger.Warn("[Character Assets] Character %s: cannot read existing concept art (%v), using text generation", name, err)
 					imageData, err = s.aigc.GenerateImageByText(ctx, fullPrompt)
 					if err != nil {
-						fmt.Printf("    Error generating concept art: %v\n", err)
+						logger.Error("[Character Assets] Character %s: failed to generate concept art: %v", name, err)
 						continue
 					}
 				} else {
-					fmt.Printf("  [Character %s] Refining concept art via img2img\n", name)
+					logger.Info("[Character Assets] Character %s: Refining concept art via img2img", name)
 					imageData, err = s.aigc.GenerateImageByImage(ctx, baseData, fullPrompt)
 					if err != nil {
-						fmt.Printf("    Error refining concept art: %v\n", err)
-						fmt.Printf("    Falling back to text-to-image generation\n")
+						logger.Warn("[Character Assets] Character %s: img2img refinement failed (%v), falling back to text generation", name, err)
 						imageData, err = s.aigc.GenerateImageByText(ctx, fullPrompt)
 						if err != nil {
-							fmt.Printf("    Error generating concept art: %v\n", err)
+							logger.Error("[Character Assets] Character %s: failed to generate concept art: %v", name, err)
 							continue
 						}
 					}
 				}
 			} else {
-				fmt.Printf("  [Character %s] Generating concept art from scratch\n", name)
+				logger.Info("[Character Assets] Character %s: Generating concept art from scratch", name)
 				imageData, err = s.aigc.GenerateImageByText(ctx, fullPrompt)
 				if err != nil {
-					fmt.Printf("    Error generating concept art: %v\n", err)
+					logger.Error("[Character Assets] Character %s: failed to generate concept art: %v", name, err)
 					continue
 				}
 			}
 
 			imageID := fmt.Sprintf("character_%d_%s", role.ID, name)
 			if err := s.storage.UploadBytes(imageData, imageID); err != nil {
-				fmt.Printf("    Error uploading concept art: %v\n", err)
+				logger.Error("[Character Assets] Character %s: failed to upload concept art: %v", name, err)
 				continue
 			}
 
 			role.ImageID = imageID
 			if err := s.roleRepo.Update(role); err != nil {
-				fmt.Printf("    Error updating role with image ID: %v\n", err)
+				logger.Error("[Character Assets] Character %s: failed to update role with imageID: %v", name, err)
+			} else {
+				logger.Info("[Character Assets] Character %s: Concept art uploaded (imageID=%s)", name, imageID)
 			}
 		} else {
-			fmt.Printf("  [Character %s] Reusing existing concept art\n", name)
+			logger.Info("[Character Assets] Character %s: Reusing existing concept art", name)
 		}
 
 		assets[name] = &CharacterAsset{
@@ -170,7 +173,7 @@ func (s *CharacterService) LoadCharacterAssets(
 
 		imageData, err := s.storage.DownloadBytes(role.ImageID)
 		if err != nil {
-			fmt.Printf("  Warning: failed to download image for character %s: %v\n", role.Name, err)
+			logger.Warn("[Character Assets] Failed to download image for character %s: %v", role.Name, err)
 			continue
 		}
 
