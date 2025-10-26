@@ -53,11 +53,11 @@ const ComicReadMobile = () => {
       )}
 
       {showOverlay && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col">
-          <div className="flex items-center justify-between px-6 py-4 bg-black/40">
+        <div className="fixed inset-0 bg-white/20 backdrop-blur-md z-50 flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 bg-white/10">
             <button
               onClick={handleBackClick}
-              className="text-white text-2xl w-10 h-10 flex items-center justify-center"
+              className="text-white text-2xl w-10 h-10 flex items-center justify-center cursor-pointer"
             >
               ←
             </button>
@@ -75,9 +75,9 @@ const ComicReadMobile = () => {
 
             <button
               onClick={handlePlayButtonClick}
-              className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
+              className="w-32 h-32 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors cursor-pointer"
             >
-              <div className="w-0 h-0 border-l-[16px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1"></div>
+              <div className="w-0 h-0 border-l-[24px] border-l-white border-t-[16px] border-t-transparent border-b-[16px] border-b-transparent ml-2"></div>
             </button>
           </div>
 
