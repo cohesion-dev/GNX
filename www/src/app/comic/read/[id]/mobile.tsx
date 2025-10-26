@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { ComicReadStore } from '@/stores'
 import { getComic } from '@/apis'
@@ -13,6 +13,8 @@ const ComicReadMobile = observer(() => {
   const sectionIndex = searchParams.get('section-index')
 
   const store = useMemo(() => new ComicReadStore(), [])
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const [transitionDirection, setTransitionDirection] = useState<'next' | 'prev'>('next')
 
   useEffect(() => {
     const initializeStore = async () => {
@@ -45,7 +47,26 @@ const ComicReadMobile = observer(() => {
     router.push(`/comic/detail/${params?.id}`)
   }
 
-  const imageUrl = store.pageManager.imageUrl
+  const imageUrl = store.currentImageUrl
+  const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null)
+  const [animationClass, setAnimationClass] = useState('')
+
+  useEffect(() => {
+    if (imageUrl && imageUrl !== displayImageUrl) {
+      setIsTransitioning(true)
+      setAnimationClass('animate-[slideInFade_0.5s_ease-in-out]')
+      
+      const timer = setTimeout(() => {
+        setDisplayImageUrl(imageUrl)
+        setIsTransitioning(false)
+        setAnimationClass('')
+      }, 100)
+      
+      return () => clearTimeout(timer)
+    } else if (imageUrl) {
+      setDisplayImageUrl(imageUrl)
+    }
+  }, [imageUrl])
 
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden">
@@ -53,11 +74,12 @@ const ComicReadMobile = observer(() => {
         className="w-full h-full flex items-center justify-center cursor-pointer"
         onClick={() => store.handleScreenTap()}
       >
-        {imageUrl ? (
+        {displayImageUrl ? (
           <img
-            src={imageUrl}
+            key={displayImageUrl}
+            src={displayImageUrl}
             alt="Comic page"
-            className="w-full h-full object-contain"
+            className={`w-full h-full object-contain ${animationClass}`}
           />
         ) : (
           <div className="w-full h-full bg-gray-800 flex items-center justify-center">
@@ -91,7 +113,7 @@ const ComicReadMobile = observer(() => {
       )}
 
       {store.showOverlay && (
-        <div className="fixed inset-0 bg-white/20 backdrop-blur-md z-50 flex flex-col">
+        <div className="fixed inset-0 bg-white/20 backdrop-blur-md z-50 flex flex-col animate-[fadeIn_0.3s_ease-in-out]">
           <div className="flex items-center justify-between px-6 py-4 bg-white/10">
             <button
               onClick={handleBackClick}
