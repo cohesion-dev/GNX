@@ -179,12 +179,12 @@ const ComicListMobile = () => {
       )}
 
       <div className="fixed top-0 left-0 right-0 bg-slate-900/20 backdrop-blur-lg z-40">
-        <div className="px-6 pb-3 text-center flex items-center justify-center" style={{ paddingTop: '16px' }}>
+        <div className="px-6 text-center flex items-center justify-center" style={{ paddingTop: '20px', paddingBottom: '20px' }}>
           <h1 className="text-xl font-bold">欢迎回家..</h1>
         </div>
       </div>
 
-      <div className="px-6 mt-20 space-y-4 pb-24">
+      <div className="px-6 space-y-4 pb-24" style={{ marginTop: '100px' }}>
         {comics.map((comic) => (
           <div
             key={comic.id}
