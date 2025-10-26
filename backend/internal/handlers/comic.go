@@ -22,14 +22,14 @@ func NewComicHandler(comicService *services.ComicService) *ComicHandler {
 
 func (h *ComicHandler) GetComics(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	status := c.Query("status")
 
 	if page < 1 {
 		page = 1
 	}
 	if limit < 1 || limit > 100 {
-		limit = 100
+		limit = 10
 	}
 
 	comics, total, err := h.comicService.GetComicList(page, limit, status)
