@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { getComics, type Comic } from '@/apis/comic'
+import { getComics, type Comic } from '@/apis'
 
 const ComicListMobile = () => {
   const router = useRouter()
@@ -11,7 +11,7 @@ const ComicListMobile = () => {
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [shakeId, setShakeId] = useState<number | null>(null)
+  const [shakeId, setShakeId] = useState<string | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
   const pullDistance = useRef(0)
@@ -200,20 +200,13 @@ const ComicListMobile = () => {
           >
             <div className="flex gap-4 items-center">
               <div className="w-16 h-16 flex items-center justify-center bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-full overflow-hidden flex-shrink-0">
-                {comic.icon ? (
-                  <img src={comic.icon} alt={comic.title} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-3xl">📚</span>
-                )}
+                <span className="text-3xl">📚</span>
               </div>
 
               <div className="flex-1 min-w-0">
                 <h3 className="text-cyan-400 font-bold text-lg mb-1">
                   {comic.title}
                 </h3>
-                <p className="text-gray-300 text-sm line-clamp-3">
-                  {comic.brief}
-                </p>
               </div>
 
               {getStatusIcon(comic.status) && (

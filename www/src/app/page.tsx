@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getComics } from '@/apis/comic'
+import { getComics } from '@/apis'
 
 export default function Home() {
   const router = useRouter()

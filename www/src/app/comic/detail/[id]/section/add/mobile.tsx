@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { getComic, createSection, type ComicDetail } from '@/apis/comic'
+import { getComic, createSection, type ComicDetail } from '@/apis'
 
 const ComicSectionAddMobile = () => {
   const router = useRouter()
@@ -19,7 +19,7 @@ const ComicSectionAddMobile = () => {
       
       setLoading(true)
       try {
-        const response = await getComic(Number(params.id))
+        const response = await getComic(params.id)
         if (response.code === 200) {
           setComic(response.data)
         }
@@ -58,13 +58,14 @@ const ComicSectionAddMobile = () => {
     try {
       const fileContent = await file.text()
       const nextIndex = (comic.sections?.length || 0) + 1
-      const response = await createSection(Number(params.id), {
-        index: nextIndex,
-        detail: fileContent
-      })
+      const response = await createSection(
+        params.id,
+        `第 ${nextIndex} 章`,
+        fileContent
+      )
 
       if (response.code === 200) {
-        router.push(`/comic/read/${params.id}?section-index=${nextIndex}`)
+        router.push(`/comic/read/${params.id}?section-index=${response.data.index}`)
       }
     } catch (error) {
       console.error('Failed to create section:', error)
