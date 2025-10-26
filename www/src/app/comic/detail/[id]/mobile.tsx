@@ -11,6 +11,7 @@ const ComicDetailMobile = () => {
   const [sections, setSections] = useState<ComicSection[]>([])
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [shakeId, setShakeId] = useState<number | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
   const pullDistance = useRef(0)
@@ -75,6 +76,9 @@ const ComicDetailMobile = () => {
   const handleSectionClick = useCallback((section: ComicSection) => {
     if (section.status === 'completed' && params?.id) {
       router.push(`/comic/read/${params.id}?section-index=${section.index}`)
+    } else {
+      setShakeId(section.id)
+      setTimeout(() => setShakeId(null), 500)
     }
   }, [router, params?.id])
 
@@ -171,8 +175,13 @@ const ComicDetailMobile = () => {
               key={section.id}
               onClick={() => handleSectionClick(section)}
               className={`bg-white/10 backdrop-blur-md rounded-2xl p-4 transition-transform ${
+                shakeId === section.id ? 'animate-shake' : ''
+              } ${
                 section.status === 'completed' ? 'cursor-pointer hover:bg-white/15' : 'cursor-not-allowed opacity-60'
               }`}
+              style={{
+                animation: shakeId === section.id ? 'shake 0.5s' : undefined
+              }}
             >
               <div className="flex items-center justify-between">
                 <div className="flex-1">
@@ -271,6 +280,14 @@ const ComicDetailMobile = () => {
           </button>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-10px); }
+          75% { transform: translateX(10px); }
+        }
+      `}</style>
     </div>
   )
 }
