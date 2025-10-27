@@ -73,6 +73,10 @@ export class ComicReadStore {
     return this.currentPageIndex + 1
   }
 
+  get currentImageUrl(): string | null {
+    return this.pageManager.imageUrl
+  }
+
   async initialize(comicId: string, sectionId: string): Promise<void> {
     this.comicId = comicId
     this.sectionId = sectionId
