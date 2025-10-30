@@ -8,30 +8,31 @@ export class ComicReadStore {
   sectionId: string = ''
   sectionData: SectionDetail | null = null
   comicTitle: string = ''
-  
+
   isPlaying: boolean = false
   showOverlay: boolean = false
   currentPageIndex: number = 0
   currentAudioIndex: number = 0
-  
+
   isLoadingImage: boolean = false
   isLoadingAudio: boolean = false
-  
+
   error: string | null = null
-  
+
   private audioPlayer: AudioPlayer
-  private pageManager: PageManager
+  pageManager: PageManager
   private sections: Array<{ id: string; index: number }> = []
+  private isInitializing: boolean = false
 
   constructor() {
     makeAutoObservable(this)
     this.audioPlayer = new AudioPlayer()
     this.pageManager = new PageManager()
-    
+
     this.audioPlayer.onEnded = () => {
       this.nextAudio()
     }
-    
+
     this.audioPlayer.onError = (error) => {
       console.error('Audio playback error:', error)
       this.nextAudio()
@@ -74,19 +75,34 @@ export class ComicReadStore {
   }
 
   async initialize(comicId: string, sectionId: string): Promise<void> {
+    // 如果正在初始化，先停止当前的播放和加载
+    if (this.isInitializing) {
+      this.audioPlayer.stop()
+      this.pageManager.dispose()
+    }
+
+    this.isInitializing = true
     this.comicId = comicId
     this.sectionId = sectionId
-    
+
+    // 停止当前播放
+    runInAction(() => {
+      this.isPlaying = false
+    })
+    this.audioPlayer.stop()
+
     try {
       await this.loadComicSections()
       await this.loadSectionData()
       await this.checkAndLoadResources()
       runInAction(() => {
         this.showOverlay = true
+        this.isInitializing = false
       })
     } catch (error) {
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Initialization failed'
+        this.isInitializing = false
       })
     }
   }
@@ -128,24 +144,24 @@ export class ComicReadStore {
   private async checkAndLoadResources(): Promise<void> {
     const page = this.currentPage
     if (!page) return
-    
+
     runInAction(() => {
       this.isLoadingImage = true
       this.isLoadingAudio = true
     })
-    
+
     try {
       const audioIds = page.details.map(d => d.id)
       this.pageManager.initialize(page.id, audioIds)
-      
+
       await this.pageManager.loadImage()
-      
+
       runInAction(() => {
         this.isLoadingImage = false
       })
-      
+
       await this.pageManager.loadAllAudios()
-      
+
       runInAction(() => {
         this.isLoadingAudio = false
       })
@@ -161,12 +177,12 @@ export class ComicReadStore {
 
   async play(): Promise<void> {
     if (!this.currentPageDetail) return
-    
+
     runInAction(() => {
       this.isPlaying = true
       this.showOverlay = false
     })
-    
+
     try {
       await this.playCurrentAudio()
     } catch (error) {
@@ -194,14 +210,14 @@ export class ComicReadStore {
   private async playCurrentAudio(): Promise<void> {
     const detail = this.currentPageDetail
     if (!detail) return
-    
+
     const audioBlob = this.pageManager.getAudioBlob(detail.id)
     if (!audioBlob) {
       console.error('Audio blob not found for:', detail.id)
       this.nextAudio()
       return
     }
-    
+
     try {
       await this.audioPlayer.play(audioBlob)
     } catch (error) {
@@ -213,7 +229,7 @@ export class ComicReadStore {
   nextAudio(): void {
     const page = this.currentPage
     if (!page) return
-    
+
     if (this.currentAudioIndex < page.details.length - 1) {
       runInAction(() => {
         this.currentAudioIndex++
@@ -228,13 +244,13 @@ export class ComicReadStore {
 
   async nextPage(): Promise<void> {
     if (!this.sectionData) return
-    
+
     if (this.currentPageIndex < this.sectionData.pages.length - 1) {
       runInAction(() => {
         this.currentPageIndex++
         this.currentAudioIndex = 0
       })
-      
+
       try {
         await this.checkAndLoadResources()
         if (this.isPlaying) {
@@ -250,7 +266,7 @@ export class ComicReadStore {
 
   async nextSection(): Promise<void> {
     if (!this.sectionData) return
-    
+
     const currentIndex = this.sections.findIndex(s => s.id === this.sectionId)
     if (currentIndex === -1 || currentIndex >= this.sections.length - 1) {
       runInAction(() => {
@@ -258,12 +274,12 @@ export class ComicReadStore {
       })
       return
     }
-    
+
     const nextSection = this.sections[currentIndex + 1]
     runInAction(() => {
       this.sectionId = nextSection.id
     })
-    
+
     try {
       await this.loadSectionData()
       await this.checkAndLoadResources()
