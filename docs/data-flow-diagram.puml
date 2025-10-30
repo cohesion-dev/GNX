@@ -1,0 +1,44 @@
+@startuml 数据流图
+title 智能动漫生成系统数据流图
+
+actor 用户 as User
+rectangle "输入模块" as Input
+rectangle "文档分割模块" as DocSplit
+rectangle "语言大模型" as LLM
+rectangle "文生图模型" as Text2Img
+rectangle "图生图模型" as Img2Img
+rectangle "TTS模块" as TTS
+database "对象存储" as Storage
+rectangle "动漫生成模块" as ComicGen
+rectangle "输出模块" as Output
+
+User --> Input : 小说/章节文本
+Input --> TTS : 请求音色列表
+TTS --> Input : 可用音色列表
+Input --> DocSplit : 整本小说文本
+DocSplit --> Input : 章节列表
+Input --> LLM : 章节文本 + 音色列表
+
+LLM --> Text2Img : 初始人物画像提示
+Text2Img --> Storage : 初始角色立绘
+LLM --> Storage : 查询历史立绘
+Storage --> LLM : 历史角色立绘
+LLM --> Img2Img : 立绘微调提示 + 历史素材
+Img2Img --> Storage : 更新角色立绘
+
+LLM --> ComicGen : 分镜结构化描述
+ComicGen --> Storage : 请求角色立绘
+Storage --> ComicGen : 角色立绘
+ComicGen --> Img2Img : 合成图 + 分镜提示
+Img2Img --> ComicGen : 漫画页图像
+ComicGen --> Storage : 漫画页图像
+
+LLM --> TTS : 分段文本 + 音色推荐
+TTS --> Storage : 语音片段缓存
+ComicGen --> Storage : 请求语音片段
+Storage --> ComicGen : 语音片段
+
+ComicGen --> Output : 漫画页 + 语音资产
+Output --> User : 漫画 + 语音
+
+@enduml
