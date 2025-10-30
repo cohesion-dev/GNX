@@ -1,0 +1,97 @@
+@startuml 输出数据结构 - SummaryChapterOutput
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+skinparam nodesep 60
+skinparam ranksep 60
+left to right direction
+
+skinparam class {
+    BackgroundColor LightGreen
+    BorderColor #27AE60
+    ArrowColor #27AE60
+}
+
+title 输出数据结构 - SummaryChapterOutput
+
+class SummaryChapterOutput {
+    + StoryboardPages: []
+    + CharacterFeatures: []
+}
+
+together {
+    class StoryboardPage {
+        + Panels: []
+        + LayoutHint: string
+        + ImagePrompt: string
+        + PageSummary: string
+    }
+    
+    class CharacterFeature {
+        + Basic: Profile
+        + Visual: Profile
+        + TTS: Profile
+        + ConceptArtPrompt: string
+        + ConceptArtNotes: string
+    }
+}
+
+class StoryboardPanel {
+    + SourceTextSegments: []
+    + PanelSummary: string
+    + VisualPrompt: string
+}
+
+class SourceTextSegment {
+    + Text: string
+    + VoiceName: string
+    + VoiceType: string
+    + SpeedRatio: float64
+    + IsNarration: bool
+    + CharacterNames: []string
+}
+
+SummaryChapterOutput "1" --> "1..*" StoryboardPage : 分镜脚本
+SummaryChapterOutput "1" --> "1..*" CharacterFeature : 角色配置
+
+StoryboardPage "1" --> "1..4" StoryboardPanel : 1-4个分格
+StoryboardPanel "1" --> "1..*" SourceTextSegment : 多个文本片段
+
+note right of SummaryChapterOutput
+<b>两大核心输出</b>
+1. 分镜脚本
+2. 角色画像
+end note
+
+note bottom of StoryboardPage
+<b>页面级配置</b>
+• LayoutHint: "2x2 grid"
+• ImagePrompt: 文生图提示词
+end note
+
+note bottom of StoryboardPanel
+<b>分格级配置</b>
+• VisualPrompt: 画面描述(英文)
+• 包含角色姿态、构图、背景
+end note
+
+note bottom of SourceTextSegment
+<b>文本片段(TTS)</b>
+• 拆分旁白和对话
+• SpeedRatio: 1.0=正常
+• CharacterNames: 角色一致性
+end note
+
+note bottom of CharacterFeature
+<b>角色多模态配置</b>
+• ConceptArtPrompt: 原画提示词
+• 保持跨章节一致性
+end note
+
+legend bottom
+<b>数据流：</b> Output → Page → Panel → Segment
+<b>用途：</b> StoryboardPages→漫画 | CharacterFeatures→原画
+end legend
+
+@enduml

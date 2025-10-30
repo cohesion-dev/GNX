@@ -1,0 +1,101 @@
+@startuml 输入数据结构 - SummaryChapterInput
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+skinparam nodesep 50
+skinparam ranksep 50
+left to right direction
+
+skinparam class {
+    BackgroundColor LightBlue
+    BorderColor #2C3E50
+    ArrowColor #2C3E50
+}
+
+title 输入数据结构 - SummaryChapterInput 
+
+class SummaryChapterInput {
+    + NovelTitle: string
+    + ChapterTitle: string
+    + Content: string
+    + AvailableVoiceStyles: []
+    + CharacterFeatures: []
+    + MaxPanelsPerPage: int
+}
+
+together {
+    class TTSVoiceItem {
+        + VoiceName: string
+        + VoiceType: string
+    }
+
+    class CharacterFeature {
+        + Basic: Profile
+        + Visual: Profile
+        + TTS: Profile
+        + ConceptArtPrompt: string
+    }
+}
+
+together {
+    class CharacterBasicProfile {
+        + Name: string
+        + Gender: string
+        + Age: string
+    }
+
+    class CharacterVisualProfile {
+        + Hair: string
+        + Expression: string
+        + SkinTone: string
+        + FaceShape: string
+    }
+
+    class CharacterTTSProfile {
+        + VoiceName: string
+        + VoiceType: string
+        + SpeedRatio: float64
+    }
+}
+
+SummaryChapterInput "1" --> "0..*" TTSVoiceItem : 可选语音风格
+SummaryChapterInput "1" --> "0..*" CharacterFeature : 已有角色配置
+
+CharacterFeature "1" --> "1" CharacterBasicProfile : 基础信息
+CharacterFeature "1" --> "1" CharacterVisualProfile : 视觉特征
+CharacterFeature "1" --> "1" CharacterTTSProfile : 语音配置
+
+note top of SummaryChapterInput
+<b>核心输入</b>
+• NovelTitle/ChapterTitle: 小说信息
+• Content: 章节原文
+• AvailableVoiceStyles: TTS列表
+• CharacterFeatures: 角色设定(跨章节一致性)
+• MaxPanelsPerPage: 最大分格数(默认4)
+end note
+
+note bottom of TTSVoiceItem
+<b>语音选项</b>
+示例: "温柔女声", "narration"
+end note
+
+note bottom of CharacterFeature
+<b>角色画像</b>
+保持跨章节一致性
+ConceptArtPrompt: 原画提示词
+end note
+
+note bottom of CharacterBasicProfile
+示例: "张三", "男", "25"
+end note
+
+note bottom of CharacterVisualProfile
+示例: "黑色短发", "温和笑容"
+end note
+
+note bottom of CharacterTTSProfile
+示例: "沉稳男声", speed=1.0
+end note
+
+@enduml

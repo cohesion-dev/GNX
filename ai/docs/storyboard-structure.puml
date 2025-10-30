@@ -1,0 +1,80 @@
+@startuml 分镜页面三层结构
+
+!theme plain
+skinparam backgroundColor #E8F8F5
+skinparam defaultFontSize 11
+skinparam nodesep 50
+skinparam ranksep 50
+left to right direction
+
+title 分镜页面三层结构 (Page → Panel → Segment)
+
+class StoryboardPage <<Layer1>> {
+    + Panels: []
+    + LayoutHint: string
+    + ImagePrompt: string
+    + PageSummary: string
+}
+
+class StoryboardPanel <<Layer2>> {
+    + SourceTextSegments: []
+    + PanelSummary: string
+    + VisualPrompt: string
+}
+
+class SourceTextSegment <<Layer3>> {
+    + Text: string
+    + VoiceName: string
+    + VoiceType: string
+    + SpeedRatio: float64
+    + IsNarration: bool
+    + CharacterNames: []string
+}
+
+StoryboardPage "1" --> "1..4" StoryboardPanel : 1-4个分格
+StoryboardPanel "1" --> "1..*" SourceTextSegment : 多个文本片段
+
+note top of StoryboardPage
+<b>第一层：页面</b>
+• LayoutHint: "2x2 grid"
+• ImagePrompt: 文生图提示词
+• 控制单页1-4个分格
+end note
+
+note top of StoryboardPanel
+<b>第二层：分格</b>
+• VisualPrompt: 画面描述
+  (角色姿态、构图、背景)
+• 每个分格包含多个文本片段
+end note
+
+note top of SourceTextSegment
+<b>第三层：文本片段(TTS)</b>
+• Text: 旁白或对话文本
+• VoiceName: 语音风格
+• SpeedRatio: 语速(1.0=正常)
+• 一个分格可能有多个声音
+end note
+
+note bottom of StoryboardPage
+<b>示例：</b>
+Page 1 (2x2 grid)
+├─ Panel 1 (左上)
+├─ Panel 2 (右上)
+├─ Panel 3 (左下)
+└─ Panel 4 (右下)
+end note
+
+note bottom of StoryboardPanel
+<b>示例：</b>
+Panel 1:
+  ├─ Segment 1: 旁白
+  └─ Segment 2: 角色对话
+end note
+
+legend bottom
+<b>用途：</b>
+Page → 文生图布局 | Panel → 分格画面 | Segment → TTS语音合成
+end legend
+
+@enduml

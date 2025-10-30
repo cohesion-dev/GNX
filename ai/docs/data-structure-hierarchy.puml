@@ -1,0 +1,126 @@
+@startuml 数据结构层次图 - 完整视图
+
+!define STRUCT class
+skinparam classAttributeIconSize 0
+skinparam backgroundColor #FEFEFE
+skinparam class {
+    BackgroundColor<<input>> LightBlue
+    BackgroundColor<<output>> LightGreen
+    BackgroundColor<<core>> LightYellow
+    BackgroundColor<<config>> LightCoral
+    BorderColor Black
+    ArrowColor Black
+}
+
+' ============ 输入数据结构 ============
+STRUCT SummaryChapterInput <<input>> {
+    + NovelTitle: string
+    + ChapterTitle: string
+    + Content: string
+    + AvailableVoiceStyles: []TTSVoiceItem
+    + CharacterFeatures: []CharacterFeature
+    + MaxPanelsPerPage: int
+}
+
+' ============ 输出数据结构 ============
+STRUCT SummaryChapterOutput <<output>> {
+    + StoryboardPages: []StoryboardPage
+    + CharacterFeatures: []CharacterFeature
+}
+
+' ============ 分镜页面结构 ============
+STRUCT StoryboardPage <<core>> {
+    + Panels: []StoryboardPanel
+    + LayoutHint: string
+    + ImagePrompt: string
+    + PageSummary: string
+}
+
+STRUCT StoryboardPanel <<core>> {
+    + SourceTextSegments: []SourceTextSegment
+    + PanelSummary: string
+    + VisualPrompt: string
+}
+
+STRUCT SourceTextSegment <<core>> {
+    + Text: string
+    + VoiceName: string
+    + VoiceType: string
+    + SpeedRatio: float64
+    + IsNarration: bool
+    + CharacterNames: []string
+}
+
+' ============ 角色配置结构 ============
+STRUCT CharacterFeature <<config>> {
+    + Basic: CharacterBasicProfile
+    + Visual: CharacterVisualProfile
+    + TTS: CharacterTTSProfile
+    + Comment: string
+    + ConceptArtPrompt: string
+    + ConceptArtNotes: string
+}
+
+STRUCT CharacterBasicProfile <<config>> {
+    + Name: string
+    + Gender: string
+    + Age: string
+}
+
+STRUCT CharacterVisualProfile <<config>> {
+    + Hair: string
+    + HabitualExpression: string
+    + SkinTone: string
+    + FaceShape: string
+}
+
+STRUCT CharacterTTSProfile <<config>> {
+    + VoiceName: string
+    + VoiceType: string
+    + SpeedRatio: float64
+}
+
+' ============ 语音配置结构 ============
+STRUCT TTSVoiceItem <<config>> {
+    + VoiceName: string
+    + VoiceType: string
+}
+
+' ============ 关系定义 ============
+SummaryChapterInput "1" *-- "0..*" TTSVoiceItem : contains
+SummaryChapterInput "1" *-- "0..*" CharacterFeature : contains
+
+SummaryChapterOutput "1" *-- "1..*" StoryboardPage : contains
+SummaryChapterOutput "1" *-- "1..*" CharacterFeature : contains
+
+StoryboardPage "1" *-- "1..4" StoryboardPanel : contains
+StoryboardPanel "1" *-- "1..*" SourceTextSegment : contains
+
+CharacterFeature "1" *-- "1" CharacterBasicProfile : has
+CharacterFeature "1" *-- "1" CharacterVisualProfile : has
+CharacterFeature "1" *-- "1" CharacterTTSProfile : has
+
+note right of SummaryChapterInput
+  <b>输入：</b>小说章节信息
+  包含原文、标题、可用语音
+  以及已有角色设定
+end note
+
+note right of SummaryChapterOutput
+  <b>输出：</b>分镜脚本
+  包含分页分镜和
+  更新后的角色画像
+end note
+
+note bottom of StoryboardPage
+  <b>页面：</b>1页包含1-4个分格
+  提供布局建议和图像提示词
+end note
+
+note bottom of CharacterFeature
+  <b>角色：</b>多模态配置
+  包含基础信息、视觉特征
+  TTS配置和原画提示词
+end note
+
+@enduml

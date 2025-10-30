@@ -1,0 +1,61 @@
+@startuml 时序图
+title 智能动漫生成系统时序图
+actor 用户 as User
+participant "输入模块" as Input
+participant "文档分割模块" as DocSplit
+participant "语言大模型" as LLM
+participant "图生图模型" as Img2Img
+participant "文生图模型" as Text2Img
+participant "TTS模块" as TTS
+participant "对象存储" as Storage
+participant "动漫生成模块" as ComicGen
+participant "输出模块" as Output
+
+Input -> TTS : 获取所有可用语音音色列表
+TTS -> Input : 返回音色列表
+
+alt 用户输入类型
+    User -> Input : 输入整本小说
+    Input -> DocSplit : 传递完整小说文本
+    DocSplit -> DocSplit : 分析文本结构，分割成章节
+    DocSplit -> Input : 返回章节列表
+    loop 遍历每个章节
+        Input -> LLM : 传递第N章文本+音色列表（N=1,2,3...）
+        note right: 进入单章节处理流程
+    end
+else
+    User -> Input : 输入单个章节文本
+    Input -> LLM : 传递章节文本+音色列表
+end
+LLM -> LLM : 分析文本，生成人物画像/分镜/TTS分段
+alt N == 1
+    LLM -> Text2Img : 发送小说基本信息及第一章人物画像提示词
+    Text2Img -> Text2Img : 生成初始角色立绘
+    Text2Img -> Storage : 保存初始角色立绘
+else N > 1
+    LLM -> Storage : 查询第N-1章角色立绘
+    Storage -> LLM : 返回历史立绘
+    LLM -> Img2Img : 发送（历史立绘+本章人物画像微调提示词)
+    Img2Img -> Img2Img : 生成第N章角色立绘
+    Img2Img -> Storage : 保存第N章角色立绘
+end
+LLM -> ComicGen : 发送分镜结构化描述信息
+ComicGen -> Storage : 获取第N章所有角色立绘图
+Storage -> ComicGen : 返回所有角色立绘
+par 并发针对每一页漫画
+    ComicGen -> ComicGen : 根据分镜中需要的人物\n动态选择合并人物立绘元素
+    ComicGen -> Img2Img : 发送（合并图+分镜提示词)
+    Img2Img -> ComicGen : 返回最终页图
+    ComicGen -> Storage : 存储漫画页
+end
+LLM -> TTS : 发送分段文本+音色推荐
+
+par 并发针对每一段文本
+TTS -> TTS : 选择合适音色生成语音片段
+TTS -> Storage : 缓存语音片段
+end
+ComicGen -> Storage : 获取语音片段
+Storage -> ComicGen : 返回语音片段
+ComicGen -> Output : 汇总漫画页+语音片段
+Output -> User : 输出"漫画+语音"页面展示
+@enduml

@@ -1,0 +1,127 @@
+@startuml 接口调用流程图
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 10
+skinparam maxMessageSize 150
+
+title SummaryChapter 接口调用流程
+
+actor "用户/系统" as User
+participant "SummaryChapter\n接口" as API #LightBlue
+participant "参数构建器" as Builder #LightGreen
+participant "OpenAI API" as OpenAI #LightYellow
+participant "JSON解析器" as Parser #LightCoral
+
+== 1. 准备阶段 ==
+User -> API: 调用 SummaryChapter(ctx, input)
+activate API
+
+API -> Builder: maxPanelsPerPageOrDefault(input.MaxPanelsPerPage)
+activate Builder
+Builder --> API: 返回有效的分格数限制\n(默认4,最少1)
+deactivate Builder
+
+API -> Builder: buildStoryboardSchema(maxPanelsPerPage)
+activate Builder
+note right
+    构建 JSON Schema
+    定义输出结构的约束
+end note
+Builder --> API: 返回 JSON Schema
+deactivate Builder
+
+API -> Builder: buildVoiceStylesJSON(input.AvailableVoiceStyles)
+activate Builder
+Builder --> API: 语音风格列表 JSON
+deactivate Builder
+
+API -> Builder: buildCharacterFeaturesJSON(input.CharacterFeatures)
+activate Builder
+Builder --> API: 已有角色配置 JSON
+deactivate Builder
+
+API -> Builder: buildSummaryChapterPrompt(...)
+activate Builder
+note right
+    组装完整的系统提示词
+    包含：
+    • 任务说明
+    • 小说和章节标题
+    • 可用语音列表
+    • 已有角色配置
+    • 分格数限制
+    • JSON Schema
+end note
+Builder --> API: 完整的 Prompt
+deactivate Builder
+
+== 2. AI 生成阶段 ==
+API -> OpenAI: Chat.Completions.New(ctx, params)
+activate OpenAI
+note right
+    请求参数：
+    • Model: 语言模型
+    • Messages:
+      - System: 构建的 Prompt
+      - User: 章节原文 Content
+    • ResponseFormat: JSON Object
+    • N: 1 (生成1个结果)
+end note
+
+OpenAI -> OpenAI: AI 模型处理\n分析小说内容\n生成分镜脚本
+note right
+    AI 执行任务：
+    1. 理解章节内容
+    2. 识别角色和场景
+    3. 拆分为多个页面
+    4. 每页设计1-4个分格
+    5. 为每个分格选择语音
+    6. 生成视觉提示词
+    7. 更新角色配置
+end note
+
+OpenAI --> API: 返回 ChatCompletion 响应
+deactivate OpenAI
+
+== 3. 解析和验证阶段 ==
+API -> API: 检查 resp.Choices 是否为空
+alt Choices 为空
+    API --> User: 返回错误: "no chat completion choices received"
+end
+
+API -> Parser: 提取 resp.Choices[0].Message.Content
+activate Parser
+
+API -> Parser: json.Unmarshal(content, &output)
+alt JSON 解析成功
+    Parser --> API: 返回 SummaryChapterOutput
+    deactivate Parser
+    API --> User: 返回成功结果
+    deactivate API
+else JSON 解析失败
+    note right
+        尝试修复 JSON
+    end note
+    API -> Parser: jsonrepair.RepairJSON(content)
+    activate Parser
+    Parser --> API: 修复后的 JSON
+    deactivate Parser
+    
+    API -> Parser: json.Unmarshal(contentFixed, &output)
+    activate Parser
+    alt 修复后解析成功
+        Parser --> API: 返回 SummaryChapterOutput
+        deactivate Parser
+        API --> User: 返回成功结果
+        deactivate API
+    else 仍然失败
+        Parser --> API: 解析错误
+        deactivate Parser
+        API --> User: 返回错误: "failed to unmarshal..."
+        deactivate API
+    end
+end
+
+@enduml
