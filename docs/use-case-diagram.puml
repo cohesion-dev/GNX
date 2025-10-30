@@ -1,0 +1,48 @@
+@startuml 用例图
+title 智能动漫生成系统用例图
+
+left to right direction
+
+actor 用户 as User
+actor "AIGC" as AIService
+actor "对象存储" as Storage
+
+rectangle "智能动漫生成系统" as System {
+  usecase "上传小说并创建漫画" as UC_CreateComic
+  usecase "查看漫画列表" as UC_ListComics
+  usecase "查看漫画详情" as UC_ViewComic
+  usecase "添加章节内容" as UC_AddSection
+  usecase "播放章节内容" as UC_PlaySection
+  usecase "查看生成状态" as UC_ViewStatus
+  usecase "生成角色立绘" as UC_GenCharacter
+  usecase "生成分镜漫画页" as UC_GenStoryboard
+  usecase "生成语音内容" as UC_GenAudio
+}
+
+User --> UC_CreateComic
+User --> UC_ListComics
+User --> UC_ViewComic
+User --> UC_AddSection
+User --> UC_PlaySection
+User --> UC_ViewStatus
+
+UC_CreateComic --> UC_GenCharacter : <<include>>
+UC_AddSection --> UC_GenCharacter : <<include>>
+UC_AddSection --> UC_GenStoryboard : <<include>>
+UC_AddSection --> UC_GenAudio : <<include>>
+UC_PlaySection --> UC_GenAudio : <<extend>>
+UC_ViewStatus --> UC_GenCharacter : <<extend>>
+UC_ViewStatus --> UC_GenStoryboard : <<extend>>
+UC_ViewStatus --> UC_GenAudio : <<extend>>
+
+AIService --> UC_GenCharacter
+AIService --> UC_GenStoryboard
+AIService --> UC_GenAudio
+
+Storage --> UC_GenCharacter
+Storage --> UC_GenStoryboard
+Storage --> UC_GenAudio
+Storage --> UC_PlaySection
+Storage --> UC_ViewComic
+
+@enduml
